@@ -1,0 +1,11 @@
+body {
+    font-family: sans-serif;
+    padding: 10px;
+    width: 250px;
+  }
+  
+  label, select, button {
+    display: block;
+    margin: 10px 0;
+  }
+  
