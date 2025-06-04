@@ -12,6 +12,5 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         .then(res => res.json())
         .then(data => console.log('Backend response:', data))
         .catch(err => console.error('Backend error:', err));
-        print(poop)
     }
   });
