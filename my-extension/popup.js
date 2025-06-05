@@ -17,11 +17,13 @@ document.addEventListener("DOMContentLoaded", () => {
           return;
         }
 
+        console.log("Extracted PDF URLs:", response.pdfUrls);
+
         const level = document.getElementById("level").value;
         const output = document.getElementById("tool").value;
 
-        // Send the PDF URLs to your backend
-        const res = await fetch("http://localhost:5000/generate", {
+        // Send the PDF URLs to the backend at port 5050
+        const res = await fetch("http://localhost:5050/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -31,12 +33,16 @@ document.addEventListener("DOMContentLoaded", () => {
           }),
         });
 
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(errorText || "Failed to generate study material.");
+        }
 
         const data = await res.json();
         alert(`Success: ${data.message}`);
       });
     } catch (error) {
+      console.error("Popup error:", error);
       alert(`Failed: ${error.message}`);
     }
   });

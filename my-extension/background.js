@@ -1,4 +1,5 @@
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log("background.js loaded"); 
     if (message.type === 'extractedText') {
       fetch('http://localhost:5000/generate', {
         method: 'POST',

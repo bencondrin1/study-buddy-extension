@@ -1,20 +1,18 @@
-from flask import Flask, request, jsonify, send_file
-import io
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 
 app = Flask(__name__)
 
-@app.route("/generate", methods=["POST"])
+# Allow only your Chrome extension to access it (recommended)
+CORS(app, origins=["chrome-extension://ehmbcgoamlbnggoeapgglllpahhlhbha"])
+
+@app.route('/generate', methods=['POST'])
 def generate():
-    data = request.json
-    text = data.get("text", "")
-    depth = data.get("depth", "Basic")
-    study_type = data.get("studyType", "Flash Cards")
+    data = request.get_json()
+    print("Received from extension:", data)
 
-    # Dummy placeholder logic
-    result = f"Generated {study_type} at {depth} level from input:\n{text[:100]}..."
+    # Dummy response
+    return jsonify({"message": "Received PDF URLs and options successfully!"})
 
-    # Return result as JSON (in real case, this would be a PDF or Anki file)
-    return jsonify({"status": "success", "result": result})
-
-if __name__ == "__main__":
-    app.run(debug=True)
+if __name__ == '__main__':
+    app.run(host="0.0.0.0", port=5050, debug=True)

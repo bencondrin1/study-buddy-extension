@@ -1,6 +1,7 @@
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  console.log("Content.js loaded"); 
   if (request.type === "extractPdfUrl") {
-    // 1. Grab all <div class="ef-item-row"> elements where aria-selected="true"
+    // Get all selected rows with class ef-item-row and aria-selected=true
     const selectedRows = Array.from(
       document.querySelectorAll("div.ef-item-row[aria-selected='true']")
     );
@@ -10,11 +11,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
     }
 
-    // 2. From each selected <div>, pull out the <a> whose href ends in ".pdf"
+    // Look inside each row for a link that likely points to a PDF
     const urls = selectedRows
       .map(row => {
-        const link = row.querySelector("a[href$='.pdf']");
-        return link ? link.href : null;
+        const links = Array.from(row.querySelectorAll("a"));
+        const pdfLink = links.find(link => {
+          const textIsPdf = link.textContent.trim().toLowerCase().endsWith(".pdf");
+          const hrefLooksLikePdf = link.href.includes("/download?download_frd=");
+          return textIsPdf || hrefLooksLikePdf;
+        });
+        return pdfLink?.href || null;
       })
       .filter(Boolean);
 
@@ -23,7 +29,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
     }
 
-    // 3. Return the array of URLs
     sendResponse({ pdfUrls: urls });
     return true;
   }
