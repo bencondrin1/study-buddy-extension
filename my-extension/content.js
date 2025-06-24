@@ -20,10 +20,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
       chrome.runtime.sendMessage({
         type: 'pdfUrl',
-        url: pdfUrl,
+        pdfUrl: pdfUrl,  // ✅ correct key name
         level: request.level,
         output_type: request.type
-      });
+      });      
 
       sendResponse({ status: '✅ PDF URL sent to backend.' });
     } catch (err) {
