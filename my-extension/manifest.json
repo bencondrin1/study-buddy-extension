@@ -3,10 +3,7 @@
   "name": "Study Tool Generator",
   "version": "1.0",
   "description": "Select a Canvas PDF and generate flashcards or study guides",
-  "permissions": [
-    "activeTab",
-    "scripting"
-  ],
+  "permissions": ["activeTab", "scripting"],
   "host_permissions": [
     "*://*.instructure.com/*",
     "*://canvas.nd.edu/*"

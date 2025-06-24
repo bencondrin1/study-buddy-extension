@@ -1,28 +1,70 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Study Tool Generator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      width: 320px;
+      padding: 15px;
+    }
+    label {
+      display: block;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+    select {
+      width: 100%;
+      padding: 6px;
+      margin-top: 4px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+    button {
+      margin-top: 20px;
+      width: 100%;
+      background-color: #0078d7;
+      color: white;
+      border: none;
+      padding: 12px;
+      font-size: 16px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #005ea2;
+    }
+    #status {
+      margin-top: 15px;
+      font-size: 14px;
+      color: #555;
+    }
+  </style>
 </head>
 <body>
-  <h3>Create Study Tool</h3>
-  <p><strong>Instructions:</strong> Highlight text on the Canvas page, then click Generate.</p>
-  
-  <label for="level">Study Depth</label>
-  <select id="level">
-    <option value="Basic">Basic</option>
-    <option value="Intermediate">Intermediate</option>
-    <option value="Advanced">Advanced</option>
+  <h2>Generate Study Tools</h2>
+
+  <label for="level-select">Choose level:</label>
+  <select id="level-select" name="level">
+    <option value="basic">Basic</option>
+    <option value="intermediate">Intermediate</option>
+    <option value="advanced">Advanced</option>
   </select>
-  
-  <label for="tool">Tool Type</label>
-  <select id="tool">
-    <option value="Flashcards">Flashcards</option>
-    <option value="Study Guide">Study Guide</option>
-    <option value="Practice Exam">Practice Exam</option>
-    <option value="Diagram">Diagram</option>
+
+  <label for="type-select">Choose study material:</label>
+  <select id="type-select" name="type">
+    <option value="flashcards">Flashcards</option>
+    <option value="study_guides">Study Guides</option>
+    <option value="practice_exams">Practice Exams</option>
+    <option value="diagrams">Diagrams</option>
   </select>
-  
-  <button id="submitBtn">Generate</button>
+
+  <button id="generate-btn">Generate</button>
+
+  <div id="status"></div>
+
   <script src="popup.js"></script>
 </body>
 </html>

@@ -1,49 +1,33 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const submitBtn = document.getElementById("submitBtn");
+  const generateBtn = document.getElementById("generate-btn");
+  const levelSelect = document.getElementById("level-select");
+  const typeSelect = document.getElementById("type-select");
+  const statusDiv = document.getElementById("status");
 
-  submitBtn.addEventListener("click", async () => {
+  generateBtn.addEventListener("click", async () => {
+    const level = levelSelect.value;
+    const type = typeSelect.value;
+
+    statusDiv.textContent = "Generating...";
+
     try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-      // Ask content script for selected PDF URLs
-      chrome.tabs.sendMessage(tab.id, { type: "extractPdfUrl" }, async (response) => {
-        if (chrome.runtime.lastError) {
-          alert("Error communicating with content script. Make sure to reload the Canvas page after installing/updating the extension.");
-          return;
-        }
-
-        if (response?.error) {
-          alert(response.error);
-          return;
-        }
-
-        console.log("Extracted PDF URLs:", response.pdfUrls);
-
-        const level = document.getElementById("level").value;
-        const output = document.getElementById("tool").value;
-
-        // Send the PDF URLs to the backend at port 5050
-        const res = await fetch("http://localhost:5050/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            pdf_urls: response.pdfUrls,
-            level: level,
-            output_type: output,
-          }),
-        });
-
-        if (!res.ok) {
-          const errorText = await res.text();
-          throw new Error(errorText || "Failed to generate study material.");
-        }
-
-        const data = await res.json();
-        alert(`Success: ${data.message}`);
+      // Send message or call background/content script to start generation
+      // Example sending message to content script or background:
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        chrome.tabs.sendMessage(
+          tabs[0].id,
+          { action: "generate", level, type },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              statusDiv.textContent = `Error: ${chrome.runtime.lastError.message}`;
+              return;
+            }
+            statusDiv.textContent = response?.status || "Generation complete!";
+          }
+        );
       });
-    } catch (error) {
-      console.error("Popup error:", error);
-      alert(`Failed: ${error.message}`);
+    } catch (err) {
+      statusDiv.textContent = "Error: " + err.message;
     }
   });
 });

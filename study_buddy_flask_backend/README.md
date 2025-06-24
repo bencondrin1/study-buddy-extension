@@ -1,45 +1,22 @@
-# Study Buddy Flask Backend
+# 📚 Study Buddy Flask Backend
 
-This is a simple local Flask API for testing.
+A local Flask API that powers a Chrome extension for generating study materials (Flashcards, Study Guides, Practice Exams, Diagrams) from Canvas-hosted PDFs.
 
-## Setup
+---
 
-1. Create a virtual environment (optional but recommended):
+## 🚀 Features
 
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
+- Accepts one or more Canvas PDF URLs
+- Extracts text or uses OCR fallback
+- Calls OpenAI GPT to generate study materials
+- Returns content in JSON format
 
-2. Install dependencies:
+---
 
-```bash
-pip install -r requirements.txt
-```
+## 🛠️ Setup Instructions
 
-3. Run the server:
+### 1. Clone the repository
 
 ```bash
-python app.py
-```
-
-4. It will be available at http://localhost:5000
-
-## Endpoint
-
-- `POST /generate`
-  - Request JSON:
-    ```json
-    {
-      "text": "Your note text",
-      "depth": "Basic",
-      "studyType": "Flash Cards"
-    }
-    ```
-  - Response JSON:
-    ```json
-    {
-      "status": "success",
-      "result": "Generated Flash Cards at Basic level..."
-    }
-    ```
+git clone https://github.com/your-username/study-buddy-backend.git
+cd study-buddy-backend
