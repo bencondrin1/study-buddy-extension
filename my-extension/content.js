@@ -1,34 +1,34 @@
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'generate') {
-    try {
-      // Find the selected row
-      const selectedRow = document.querySelector('.ef-item-row.ef-item-selected');
-      if (!selectedRow) {
-        sendResponse({ status: '❌ No selected item found.' });
-        return;
+  if (request.action === 'getSelectedPdfBase64') {
+    (async () => {
+      try {
+        const selectedElement = document.querySelector('.ef-item-row.ef-item-selected a.ef-name-col__link');
+        if (!selectedElement) {
+          sendResponse({ error: 'No selected PDF link found. Please highlight a PDF box.' });
+          return;
+        }
+
+        const pdfUrl = selectedElement.href;
+        const response = await fetch(pdfUrl);
+        if (!response.ok) {
+          sendResponse({ error: `Failed to fetch PDF: ${response.statusText}` });
+          return;
+        }
+
+        const blob = await response.blob();
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64data = reader.result.split(',')[1]; // strip data:*/*;base64,
+          sendResponse({ pdfBase64: base64data });
+        };
+        reader.readAsDataURL(blob);
+
+      } catch (error) {
+        sendResponse({ error: error.message });
       }
+    })();
 
-      // Find the link to the PDF
-      const link = selectedRow.querySelector('a.ef-name-col__link');
-      if (!link || !link.href.includes('/download')) {
-        sendResponse({ status: '❌ No PDF link found in selected item.' });
-        return;
-      }
-
-      const pdfUrl = link.href;
-      console.log('📄 PDF URL:', pdfUrl);
-
-      chrome.runtime.sendMessage({
-        type: 'pdfUrl',
-        pdfUrl: pdfUrl,  // ✅ correct key name
-        level: request.level,
-        output_type: request.type
-      });      
-
-      sendResponse({ status: '✅ PDF URL sent to backend.' });
-    } catch (err) {
-      console.error('❌ Error extracting PDF URL:', err);
-      sendResponse({ status: '❌ Error extracting PDF URL.' });
-    }
+    return true; // Indicates async response
   }
 });

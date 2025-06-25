@@ -9,6 +9,8 @@
       font-family: Arial, sans-serif;
       width: 320px;
       padding: 15px;
+      background-color: #fff;
+      color: #000;
     }
     label {
       display: block;
@@ -48,17 +50,17 @@
 
   <label for="level-select">Choose level:</label>
   <select id="level-select" name="level">
-    <option value="basic">Basic</option>
-    <option value="intermediate">Intermediate</option>
-    <option value="advanced">Advanced</option>
+    <option value="Basic">Basic</option>
+    <option value="Intermediate" selected>Intermediate</option>
+    <option value="Advanced">Advanced</option>
   </select>
 
   <label for="type-select">Choose study material:</label>
   <select id="type-select" name="type">
-    <option value="flashcards">Flashcards</option>
-    <option value="study_guides">Study Guides</option>
-    <option value="practice_exams">Practice Exams</option>
-    <option value="diagrams">Diagrams</option>
+    <option value="Flashcards">Flashcards</option>
+    <option value="Study Guide" selected>Study Guide</option>
+    <option value="Practice Exams">Practice Exams</option>
+    <option value="Diagrams">Diagrams</option>
   </select>
 
   <button id="generate-btn">Generate</button>

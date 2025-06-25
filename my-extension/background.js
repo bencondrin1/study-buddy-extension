@@ -1,14 +1,14 @@
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'pdfUrl') {
-    console.log("✅ PDF URL sent to backend:", message.pdfUrl);
+  if (message && message.type === 'pdfUrl') {
+    console.log("✅ PDF URL received in background:", message.pdfUrl);
 
-    fetch('http://127.0.0.1:5000/generate', {
+    fetch('http://127.0.0.1:5050/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        level: message.level,
-        output_type: message.output_type,
-        pdf_urls: [message.pdfUrl]
+        pdf_urls: [message.pdfUrl],
+        level: message.level || 'Intermediate',
+        output_type: message.output_type || 'Study Guide'
       })
     })
       .then(res => {
@@ -17,9 +17,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       })
       .then(data => {
         console.log('✅ Backend response:', data);
+        sendResponse({ success: true, data });
       })
       .catch(err => {
         console.error('❌ Backend fetch failed:', err);
+        sendResponse({ success: false, error: err.message });
       });
+
+    return true; // Keep message channel open for async response
   }
 });
