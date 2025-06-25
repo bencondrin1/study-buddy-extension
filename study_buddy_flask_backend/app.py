@@ -6,15 +6,24 @@ import traceback
 
 from utils.pdf_utils import extract_text_from_pdf
 from utils.ocr_utils import extract_text_with_vision
-from utils.gpt_utils import generate_study_materials_as_pdf  # <- must return BytesIO
+from utils.gpt_utils import generate_study_materials_as_pdf
 
 app = Flask(__name__)
+CORS(app, supports_credentials=True)
 
-# Allow Chrome Extension origin
-CORS(app, origins=["chrome-extension://ehmbcgoamlbnggoeapgglllpahhlhbha"], supports_credentials=True)
-
-@app.route('/generate_blob', methods=['POST'])
+@app.route('/generate_blob', methods=['POST', 'OPTIONS'])
 def generate_blob():
+    if request.method == 'OPTIONS':
+        # Preflight CORS response
+        response = app.make_default_options_response()
+        headers = response.headers
+
+        headers['Access-Control-Allow-Origin'] = '*'
+        headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        headers['Access-Control-Allow-Credentials'] = 'true'
+        return response
+
     try:
         data = request.get_json()
         pdf_base64 = data.get('pdf_base64')
@@ -38,15 +47,29 @@ def generate_blob():
         if not text.strip():
             return jsonify({"error": "No text could be extracted from PDF"}), 400
 
-        print("🤖 Sending extracted text to GPT...")
-        result_pdf = generate_study_materials_as_pdf(text, level, output_type)
+        print("🤖 Generating study material PDF...")
+        pdf_buffer = generate_study_materials_as_pdf(text, level, output_type)
 
-        return send_file(result_pdf, download_name="study_material.pdf", mimetype="application/pdf")
+        pdf_buffer.seek(0)
+
+        # Sanitize for filename
+        safe_output_type = output_type.replace(" ", "_").lower()
+        safe_level = level.replace(" ", "_").lower()
+        filename = f"{safe_output_type}_{safe_level}.pdf"
+
+        return send_file(
+            pdf_buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=filename,
+            conditional=False
+        )
 
     except Exception as e:
         print(f"❌ Internal server error: {e}")
         traceback.print_exc()
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5050)
