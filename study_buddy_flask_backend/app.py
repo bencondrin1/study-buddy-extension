@@ -1,30 +1,20 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS, cross_origin
+from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
 from io import BytesIO
 import base64
 import traceback
 
 from utils.pdf_utils import extract_text_from_pdf
 from utils.ocr_utils import extract_text_with_vision
-from utils.gpt_utils import generate_study_materials
+from utils.gpt_utils import generate_study_materials_as_pdf  # <- must return BytesIO
 
 app = Flask(__name__)
 
-# Apply CORS globally and ensure it works for all routes
-CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+# Allow Chrome Extension origin
+CORS(app, origins=["chrome-extension://ehmbcgoamlbnggoeapgglllpahhlhbha"], supports_credentials=True)
 
-@app.route('/generate_blob', methods=['POST', 'OPTIONS'])
-@cross_origin(origin='*', headers=['Content-Type', 'Authorization'], methods=['POST', 'OPTIONS'])
+@app.route('/generate_blob', methods=['POST'])
 def generate_blob():
-    if request.method == 'OPTIONS':
-        # Manually handle preflight with correct headers
-        response = jsonify({'message': 'Preflight OK'})
-        response.headers.add("Access-Control-Allow-Origin", "*")
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
-        response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-        response.headers.add("Access-Control-Allow-Credentials", "true")
-        return response, 200
-
     try:
         data = request.get_json()
         pdf_base64 = data.get('pdf_base64')
@@ -49,9 +39,9 @@ def generate_blob():
             return jsonify({"error": "No text could be extracted from PDF"}), 400
 
         print("🤖 Sending extracted text to GPT...")
-        result = generate_study_materials(text, level, output_type)
+        result_pdf = generate_study_materials_as_pdf(text, level, output_type)
 
-        return jsonify({"message": result}), 200
+        return send_file(result_pdf, download_name="study_material.pdf", mimetype="application/pdf")
 
     except Exception as e:
         print(f"❌ Internal server error: {e}")
@@ -59,4 +49,4 @@ def generate_blob():
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    app.run(host = '0.0.0.0', debug=True, port=5050)
+    app.run(debug=True, port=5050)

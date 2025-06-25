@@ -8,13 +8,14 @@ document.addEventListener('DOMContentLoaded', () => {
     statusDiv.textContent = '⏳ Fetching selected PDF...';
 
     try {
+      // Get active tab
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
       if (!tab) {
         statusDiv.textContent = '❌ No active tab found.';
         return;
       }
 
+      // Ask content script for base64 PDF of the selected item
       chrome.tabs.sendMessage(
         tab.id,
         { action: 'getSelectedPdfBase64' },
@@ -33,15 +34,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
           statusDiv.textContent = '📤 Sending PDF to backend for processing...';
 
+          const payload = {
+            pdf_base64: pdfBase64,
+            level: levelSelect.value,
+            output_type: typeSelect.value
+          };
+
           try {
             const res = await fetch('http://localhost:5050/generate_blob', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                pdf_base64: pdfBase64,
-                level: levelSelect.value,
-                output_type: typeSelect.value
-              })
+              body: JSON.stringify(payload)
             });
 
             if (!res.ok) {
@@ -50,9 +53,12 @@ document.addEventListener('DOMContentLoaded', () => {
               return;
             }
 
-            const data = await res.json();
-            statusDiv.textContent = '✅ Study materials generated successfully!';
-            console.log('Study materials:', data.message);
+            // Receive PDF blob and open it in a new tab
+            const blob = await res.blob();
+            const pdfUrl = URL.createObjectURL(blob);
+            window.open(pdfUrl, '_blank');
+
+            statusDiv.textContent = '✅ Study materials generated and opened!';
 
           } catch (backendErr) {
             statusDiv.textContent = `❌ Backend request failed: ${backendErr.message}`;
