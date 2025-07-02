@@ -1,4 +1,6 @@
 import os
+import re
+import subprocess
 from io import BytesIO
 from openai import OpenAI, OpenAIError
 from dotenv import load_dotenv
@@ -7,23 +9,25 @@ from markdown import markdown
 
 load_dotenv()
 
-# Initialize OpenAI client
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def generate_study_materials(text, level, output_type):
-    """
-    Generate study material text from GPT.
-    """
-    prompt = (
-        f"Generate a well-formatted {output_type} for students at the {level} level "
-        f"based on the following course material:\n\n{text}\n\n"
-        f"Include headings, bullet points, math where needed, and make it clear and organized."
+    base_prompt = (
+        f"Generate a well-organized, visually clean, and easy-to-read {output_type} "
+        f"at the {level} level based on the following course material:\n\n{text}\n\n"
+        "Use clear formatting, bullet points, math notation in LaTeX (e.g. \\frac, \\int), and include examples when helpful."
     )
+
+    if level.lower() == "in-depth":
+        base_prompt += (
+            "\n\nIf you see any unsolved or partial math examples, do your best to solve and complete them."
+            " Show your work. Render your answer in LaTeX format and highlight your completions in red."
+        )
 
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": base_prompt}],
             max_tokens=2000,
             temperature=0.7,
         )
@@ -37,15 +41,59 @@ def generate_study_materials(text, level, output_type):
         print(f"❌ Unexpected error: {e}")
         return "[Error: Unexpected failure]"
 
-def generate_study_materials_as_pdf(text, level, output_type):
-    """
-    Generate a study guide using GPT, convert to styled HTML, and return PDF BytesIO.
-    """
-    print("🧠 Generating study materials with GPT...")
-    html_content = generate_study_materials(text, level, output_type)
+def render_latex_math(latex_expr):
+    try:
+        result = subprocess.run(
+            ['katex', '--no-throw-on-error'],
+            input=latex_expr,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout
+    except subprocess.CalledProcessError as e:
+        print(f"❌ KaTeX error: {e.stderr}")
+        return f"<code>{latex_expr}</code>"
 
-    print("🎨 Formatting HTML...")
-    html_body = markdown(html_content.replace("\n", "\n\n"))
+def render_math_in_markdown(md_text):
+    # Render \[ ... \] block math first
+    def block_repl(match):
+        latex = match.group(1).strip()
+        return f"<div style='margin:1em 0'>{render_latex_math(latex)}</div>"
+
+    # Then render \( ... \) inline math
+    def inline_repl(match):
+        latex = match.group(1).strip()
+        return render_latex_math(latex)
+
+    md_text = re.sub(r'\\\[(.+?)\\\]', block_repl, md_text, flags=re.DOTALL)
+    md_text = re.sub(r'\\\((.+?)\\\)', inline_repl, md_text, flags=re.DOTALL)
+    return md_text
+
+def highlight_gpt_completions(html):
+    return re.sub(
+        r'\[\[GPT:(.+?)\]\]',  # e.g., [[GPT:completion]]
+        r'<span style="color: red;">\1</span>',
+        html
+    )
+
+def generate_study_materials_as_pdf(text, level, output_type):
+    print("🧠 Generating study materials with GPT...")
+    content_md = generate_study_materials(text, level, output_type)
+
+    # Pre-process GPT completions (e.g., added answers marked by [[GPT:...]])
+    content_md = content_md.replace("**[GPT]**", "[[GPT:")  # in case GPT uses fallback markers
+    content_md = content_md.replace("**[GPT]:**", "[[GPT:")  # normalize
+    content_md = content_md.replace("**[GPT Completion]:**", "[[GPT:")
+    content_md = content_md.replace("]]", "]]")  # ensure closure
+
+    print("🔬 Rendering math with KaTeX...")
+    content_md = render_math_in_markdown(content_md)
+
+    print("🎨 Converting markdown to HTML...")
+    html_body = markdown(content_md.replace("\n", "\n\n"))
+    html_body = highlight_gpt_completions(html_body)
+
     title = f"{get_title_from_text(text)} — {output_type} ({level})"
 
     full_html = f"""
@@ -53,6 +101,7 @@ def generate_study_materials_as_pdf(text, level, output_type):
     <head>
         <meta charset='utf-8'>
         <title>{title}</title>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
         <style>
             body {{
                 font-family: 'Georgia', serif;
@@ -63,11 +112,11 @@ def generate_study_materials_as_pdf(text, level, output_type):
             h1 {{
                 font-size: 24px;
                 text-align: center;
-                margin-bottom: 0.5em;
+                margin-bottom: 1em;
             }}
             h2, h3 {{
-                margin-top: 1em;
                 color: #2a6ebd;
+                margin-top: 1em;
             }}
             ul {{
                 margin-left: 1.5em;
@@ -85,10 +134,8 @@ def generate_study_materials_as_pdf(text, level, output_type):
                 border-radius: 5px;
                 overflow-x: auto;
             }}
-            hr {{
-                margin: 2em 0;
-                border: none;
-                border-top: 1px solid #ccc;
+            span.katex {{
+                font-size: 1.05em;
             }}
         </style>
     </head>
@@ -106,11 +153,7 @@ def generate_study_materials_as_pdf(text, level, output_type):
     return pdf_buffer
 
 def get_title_from_text(text):
-    """
-    Try to extract a short title or first heading from the input text.
-    """
-    lines = text.strip().splitlines()
-    for line in lines:
+    for line in text.strip().splitlines():
         if line.strip():
             return line.strip()[:60]
     return "Study Material"

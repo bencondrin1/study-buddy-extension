@@ -7,7 +7,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         pdf_urls: [message.pdfUrl],
-        level: message.level || 'Intermediate',
+        level: message.level || 'Basic',
         output_type: message.output_type || 'Study Guide'
       })
     })
