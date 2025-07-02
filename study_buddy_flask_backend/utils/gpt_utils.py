@@ -8,94 +8,99 @@ from weasyprint import HTML
 from markdown import markdown
 
 load_dotenv()
-
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def generate_study_materials(text, level, output_type):
-    base_prompt = (
-        f"Generate a well-organized, visually clean, and easy-to-read {output_type} "
-        f"at the {level} level based on the following course material:\n\n{text}\n\n"
-        "Use clear formatting, bullet points, math notation in LaTeX (e.g. \\frac, \\int), and include examples when helpful."
-    )
+# === Math rendering ===
 
-    if level.lower() == "in-depth":
-        base_prompt += (
-            "\n\nIf you see any unsolved or partial math examples, do your best to solve and complete them."
-            " Show your work. Render your answer in LaTeX format and highlight your completions in red."
-        )
-
+def render_latex_with_katex(latex_expr, display_mode=False):
     try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": base_prompt}],
-            max_tokens=2000,
-            temperature=0.7,
-        )
-        return response.choices[0].message.content.strip()
+        if display_mode:
+            latex_expr = f"\\displaystyle {latex_expr}"
 
-    except OpenAIError as e:
-        print(f"❌ OpenAI API error: {e}")
-        return "[Error: OpenAI API call failed]"
-
-    except Exception as e:
-        print(f"❌ Unexpected error: {e}")
-        return "[Error: Unexpected failure]"
-
-def render_latex_math(latex_expr):
-    try:
         result = subprocess.run(
-            ['katex', '--no-throw-on-error'],
+            ['node', 'katex_renderer.js'],
             input=latex_expr,
             capture_output=True,
             text=True,
             check=True
         )
-        return result.stdout
+        return result.stdout.strip()
     except subprocess.CalledProcessError as e:
         print(f"❌ KaTeX error: {e.stderr}")
         return f"<code>{latex_expr}</code>"
 
-def render_math_in_markdown(md_text):
-    # Render \[ ... \] block math first
-    def block_repl(match):
+def render_math_in_html(text):
+    """
+    Replace LaTeX math expressions in the text with rendered KaTeX HTML.
+    Handles both inline \( ... \) and display \[ ... \].
+    """
+
+    def replace_block(match):
         latex = match.group(1).strip()
-        return f"<div style='margin:1em 0'>{render_latex_math(latex)}</div>"
+        return f"<div style='margin: 1em 0'>{render_latex_with_katex(latex, display_mode=True)}</div>"
 
-    # Then render \( ... \) inline math
-    def inline_repl(match):
+    def replace_inline(match):
         latex = match.group(1).strip()
-        return render_latex_math(latex)
+        return render_latex_with_katex(latex, display_mode=False)
 
-    md_text = re.sub(r'\\\[(.+?)\\\]', block_repl, md_text, flags=re.DOTALL)
-    md_text = re.sub(r'\\\((.+?)\\\)', inline_repl, md_text, flags=re.DOTALL)
-    return md_text
+    # Block math first
+    text = re.sub(r'\\\[(.+?)\\\]', replace_block, text, flags=re.DOTALL)
+    # Then inline math
+    text = re.sub(r'\\\((.+?)\\\)', replace_inline, text, flags=re.DOTALL)
 
-def highlight_gpt_completions(html):
+    return text
+
+# === OpenAI Completion ===
+
+def generate_study_materials(text, level, output_type):
+    prompt = (
+        f"Generate a clear, accurate {output_type} at a {level} level using the following notes:\n\n{text}\n\n"
+        "Use LaTeX for any math, and format examples. For each example, solve it if not already solved. "
+        "Wrap your own completions inside [[GPT:...]] so I can highlight them."
+    )
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=2000,
+            temperature=0.7,
+        )
+        return response.choices[0].message.content.strip()
+    except OpenAIError as e:
+        print(f"❌ OpenAI API error: {e}")
+        return "[Error: OpenAI API call failed]"
+    except Exception as e:
+        print(f"❌ Unexpected error: {e}")
+        return "[Error: Unexpected failure]"
+
+def highlight_gpt_insertions(html):
     return re.sub(
-        r'\[\[GPT:(.+?)\]\]',  # e.g., [[GPT:completion]]
-        r'<span style="color: red;">\1</span>',
+        r"\[\[GPT:(.+?)\]\]",
+        r"<span style='color: red;'>\1</span>",
         html
     )
 
+# === Final PDF Formatter ===
+
+def get_title_from_text(text):
+    for line in text.strip().splitlines():
+        if line.strip():
+            return line.strip()[:60]
+    return "Study Guide"
+
 def generate_study_materials_as_pdf(text, level, output_type):
-    print("🧠 Generating study materials with GPT...")
-    content_md = generate_study_materials(text, level, output_type)
+    print("🧠 Generating GPT content...")
+    raw_md = generate_study_materials(text, level, output_type)
 
-    # Pre-process GPT completions (e.g., added answers marked by [[GPT:...]])
-    content_md = content_md.replace("**[GPT]**", "[[GPT:")  # in case GPT uses fallback markers
-    content_md = content_md.replace("**[GPT]:**", "[[GPT:")  # normalize
-    content_md = content_md.replace("**[GPT Completion]:**", "[[GPT:")
-    content_md = content_md.replace("]]", "]]")  # ensure closure
+    print("🔬 Rendering math to KaTeX...")
+    rendered_md = render_math_in_html(raw_md)
 
-    print("🔬 Rendering math with KaTeX...")
-    content_md = render_math_in_markdown(content_md)
-
-    print("🎨 Converting markdown to HTML...")
-    html_body = markdown(content_md.replace("\n", "\n\n"))
-    html_body = highlight_gpt_completions(html_body)
+    print("🎨 Converting Markdown to HTML...")
+    html_body = markdown(rendered_md.replace("\n", "\n\n"))
+    html_body = highlight_gpt_insertions(html_body)
 
     title = f"{get_title_from_text(text)} — {output_type} ({level})"
-
     full_html = f"""
     <html>
     <head>
@@ -146,14 +151,8 @@ def generate_study_materials_as_pdf(text, level, output_type):
     </html>
     """
 
-    print("📄 Rendering PDF...")
+    print("📄 Writing PDF...")
     pdf_buffer = BytesIO()
     HTML(string=full_html).write_pdf(pdf_buffer)
     pdf_buffer.seek(0)
     return pdf_buffer
-
-def get_title_from_text(text):
-    for line in text.strip().splitlines():
-        if line.strip():
-            return line.strip()[:60]
-    return "Study Material"
