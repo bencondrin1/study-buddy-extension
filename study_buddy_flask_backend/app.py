@@ -1,3 +1,5 @@
+# app.py
+
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from io import BytesIO
@@ -6,64 +8,59 @@ import traceback
 
 from utils.pdf_utils import extract_text_from_pdf
 from utils.ocr_utils import extract_text_with_vision
-from utils.gpt_utils import generate_study_materials_as_pdf
+from utils.gpt_utils import generate_flashcards, parse_flashcards
+from utils.flashcard_utils import export_flashcards_to_csv, export_flashcards_to_apkg
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
 
-@app.route('/generate_blob', methods=['POST', 'OPTIONS'])
-def generate_blob():
-    if request.method == 'OPTIONS':
-        response = app.make_default_options_response()
-        headers = response.headers
-        headers['Access-Control-Allow-Origin'] = '*'
-        headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-        headers['Access-Control-Allow-Headers'] = 'Content-Type'
-        headers['Access-Control-Allow-Credentials'] = 'true'
-        return response
-
+@app.route('/generate_flashcards', methods=['POST'])
+def generate_flashcards_endpoint():
     try:
         data = request.get_json()
         pdf_base64 = data.get('pdf_base64')
         level = data.get('level', 'Basic')
-        output_type = data.get('output_type', 'Study Guide')
+        file_type = data.get('file_type', 'csv')
 
         if not pdf_base64:
             return jsonify({"error": "No PDF data provided"}), 400
 
         pdf_bytes = base64.b64decode(pdf_base64)
-        pdf_io = BytesIO(pdf_bytes)
-
-        print("📖 Extracting text from PDF...")
-        text = extract_text_from_pdf(pdf_io)
+        text = extract_text_from_pdf(BytesIO(pdf_bytes))
 
         if not text.strip():
             print("🔍 No extractable text found. Trying OCR fallback...")
-            pdf_io.seek(0)
-            text = extract_text_with_vision(pdf_io.read())
+            text = extract_text_with_vision(pdf_bytes)
 
-        if not text.strip():
-            return jsonify({"error": "No extractable text found in PDF."}), 400
+        print(f"📚 Generating flashcards ({level}, {file_type})...")
+        raw_gpt_output = generate_flashcards(text, level)
+        flashcards = parse_flashcards(raw_gpt_output)
 
-        print(f"🤖 Generating {output_type} ({level}) PDF...")
-        pdf_buffer = generate_study_materials_as_pdf(text, level, output_type)
+        if not flashcards:
+            return jsonify({"error": "Failed to parse flashcards"}), 500
 
-        safe_output_type = output_type.replace(" ", "_").lower()
-        safe_level = level.replace(" ", "_").lower()
-        filename = f"{safe_output_type}_{safe_level}.pdf"
+        if file_type.lower() == 'csv':
+            buffer = export_flashcards_to_csv(flashcards)
+            mimetype = 'text/csv'
+            filename = 'flashcards.csv'
+        elif file_type.lower() == 'apkg':
+            buffer = export_flashcards_to_apkg(flashcards)
+            mimetype = 'application/octet-stream'
+            filename = 'flashcards.apkg'
+        else:
+            return jsonify({"error": f"Unsupported file type: {file_type}"}), 400
 
         return send_file(
-            pdf_buffer,
-            mimetype='application/pdf',
+            buffer,
+            mimetype=mimetype,
             as_attachment=True,
-            download_name=filename,
-            conditional=False
+            download_name=filename
         )
 
     except Exception as e:
-        print(f"❌ Internal server error: {e}")
+        print(f"❌ Server error: {e}")
         traceback.print_exc()
-        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5050)

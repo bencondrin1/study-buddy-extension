@@ -2,22 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Study Tool Generator</title>
   <style>
     body {
       font-family: Arial, sans-serif;
+      padding: 16px;
       width: 320px;
-      padding: 15px;
-      background-color: #fff;
-      color: #000;
     }
     label {
+      font-weight: bold;
       display: block;
       margin-top: 10px;
-      font-weight: bold;
     }
-    select {
+    select, button {
       width: 100%;
       padding: 6px;
       margin-top: 4px;
@@ -25,15 +22,12 @@
       border: 1px solid #ccc;
     }
     button {
-      margin-top: 20px;
-      width: 100%;
       background-color: #0078d7;
       color: white;
-      border: none;
-      padding: 12px;
-      font-size: 16px;
-      border-radius: 4px;
+      font-size: 15px;
+      margin-top: 20px;
       cursor: pointer;
+      border: none;
     }
     button:hover {
       background-color: #005ea2;
@@ -41,7 +35,14 @@
     #status {
       margin-top: 15px;
       font-size: 14px;
-      color: #555;
+      color: #444;
+    }
+    #flashcard-options {
+      display: none;
+      margin-top: 10px;
+    }
+    small {
+      color: #a00;
     }
   </style>
 </head>
@@ -49,21 +50,29 @@
   <h2>Generate Study Tools</h2>
 
   <label for="level-select">Choose level:</label>
-  <select id="level-select" name="level">
-    <option value="Basic" selected>Basic</option>
+  <select id="level-select">
+    <option value="Basic">Basic</option>
     <option value="In-depth">In-depth</option>
   </select>
 
   <label for="type-select">Choose study material:</label>
-  <select id="type-select" name="type">
+  <select id="type-select">
+    <option value="Study Guide">Study Guide</option>
     <option value="Flashcards">Flashcards</option>
-    <option value="Study Guide" selected>Study Guide</option>
     <option value="Practice Exams">Practice Exams</option>
     <option value="Diagrams">Diagrams</option>
   </select>
 
-  <button id="generate-btn">Generate</button>
+  <div id="flashcard-options">
+    <label for="filetype-select">Flashcard File Type:</label>
+    <select id="filetype-select">
+      <option value="csv">CSV</option>
+      <option value="apkg">Anki (.apkg)</option>
+    </select>
+    <small>🔔 You need Anki installed to open .apkg files.</small>
+  </div>
 
+  <button id="generate-btn">Generate</button>
   <div id="status"></div>
 
   <script src="popup.js"></script>

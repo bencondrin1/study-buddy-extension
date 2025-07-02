@@ -156,3 +156,45 @@ def generate_study_materials_as_pdf(text, level, output_type):
     HTML(string=full_html).write_pdf(pdf_buffer)
     pdf_buffer.seek(0)
     return pdf_buffer
+
+def generate_flashcards(text, level="Basic"):
+    """
+    Sends a request to OpenAI to generate flashcards from input text.
+    """
+    prompt = (
+        f"Generate flashcards at the {level} level based on the following content.\n\n"
+        f"Format the output as Q: <question>\nA: <answer>, one flashcard per block.\n\n"
+        f"Text:\n{text}"
+    )
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=1500,
+            temperature=0.7,
+        )
+        return response.choices[0].message.content.strip()
+
+    except OpenAIError as e:
+        print(f"❌ OpenAI API error: {e}")
+        return "[Error: OpenAI API call failed]"
+
+def parse_flashcards(raw_text):
+    """
+    Converts raw GPT response into a list of (question, answer) tuples.
+    """
+    cards = []
+    current_q, current_a = None, None
+
+    for line in raw_text.splitlines():
+        line = line.strip()
+        if line.startswith("Q:"):
+            current_q = line[2:].strip()
+        elif line.startswith("A:"):
+            current_a = line[2:].strip()
+            if current_q and current_a:
+                cards.append((current_q, current_a))
+                current_q, current_a = None, None
+
+    return cards

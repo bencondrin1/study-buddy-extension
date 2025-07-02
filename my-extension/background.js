@@ -1,6 +1,6 @@
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message && message.type === 'pdfUrl') {
-    console.log("✅ PDF URL received in background:", message.pdfUrl);
+  if (message?.type === 'pdfUrl') {
+    console.log("✅ Received PDF URL:", message.pdfUrl);
 
     fetch('http://127.0.0.1:5050/generate', {
       method: 'POST',
@@ -11,19 +11,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         output_type: message.output_type || 'Study Guide'
       })
     })
-      .then(res => {
-        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-        return res.json();
-      })
-      .then(data => {
-        console.log('✅ Backend response:', data);
-        sendResponse({ success: true, data });
-      })
-      .catch(err => {
-        console.error('❌ Backend fetch failed:', err);
-        sendResponse({ success: false, error: err.message });
-      });
+    .then(response => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    })
+    .then(data => {
+      console.log("✅ Backend success:", data);
+      sendResponse({ success: true, data });
+    })
+    .catch(err => {
+      console.error("❌ Backend error:", err);
+      sendResponse({ success: false, error: err.message });
+    });
 
-    return true; // Keep message channel open for async response
+    return true; // Keep async channel open
   }
 });
