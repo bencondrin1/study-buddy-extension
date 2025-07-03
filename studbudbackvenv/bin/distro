@@ -1,4 +1,4 @@
-#!/Users/benjamincondrin/Desktop/study-buddy-extension/study_buddy_flask_backend/studbudbackvenv/bin/python3.11
+#!/Users/benjamincondrin/Desktop/study-buddy-extension/studbudbackvenv/bin/python3.13
 # -*- coding: utf-8 -*-
 import re
 import sys

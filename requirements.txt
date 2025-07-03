@@ -1,3 +1,10 @@
-export PATH="/opt/homebrew/bin:$PATH"
-export PKG_CONFIG_PATH="/opt/homebrew/lib/pkgconfig:/opt/homebrew/share/pkgconfig:$PKG_CONFIG_PATH"
-export DYLD_LIBRARY_PATH="/opt/homebrew/lib:$DYLD_LIBRARY_PATH"
+Flask==3.1.1
+flask-cors==4.0.0
+PyPDF2==3.0.1
+requests==2.31.0
+openai==1.92.3
+python-dotenv==1.0.0
+reportlab==4.0.4
+genanki==0.13.1
+markdown==3.5.2
+weasyprint==59.0

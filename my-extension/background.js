@@ -2,7 +2,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'pdfUrl') {
     console.log("✅ Received PDF URL:", message.pdfUrl);
 
-    fetch('http://127.0.0.1:5050/generate', {
+    fetch('http://127.0.0.1:5050/generate_blob', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -24,6 +24,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ success: false, error: err.message });
     });
 
-    return true; // Keep async channel open
+    return true;
   }
 });

@@ -1,37 +1,25 @@
 // katex_renderer.js
 
 const katex = require("katex");
-const readline = require("readline");
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-  terminal: false,
-});
-
+// Read input from stdin
 let input = "";
-
-rl.on("line", (line) => {
-  input += line + "\n";
+process.stdin.on("data", chunk => {
+  input += chunk;
 });
 
-rl.on("close", () => {
+process.stdin.on("end", () => {
   try {
     const latex = input.trim();
-
-    // Detect \displaystyle passed from Python to enable block rendering
-    const isDisplay = latex.startsWith("\\displaystyle ");
-    const cleanLatex = isDisplay ? latex.replace("\\displaystyle ", "") : latex;
-
-    const html = katex.renderToString(cleanLatex, {
+    const displayMode = process.argv.includes("--display-mode");
+    const html = katex.renderToString(latex, {
+      displayMode: displayMode,
       throwOnError: false,
-      displayMode: isDisplay,
-      strict: "warn",
+      errorColor: "#cc0000"
     });
-
-    console.log(html);
-  } catch (err) {
-    console.error("KaTeX render error:", err.message);
+    process.stdout.write(html);
+  } catch (error) {
+    console.error("KaTeX rendering error:", error.message);
     process.exit(1);
   }
 });

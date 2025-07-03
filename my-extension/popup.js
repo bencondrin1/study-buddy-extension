@@ -1,74 +1,91 @@
-document.addEventListener('DOMContentLoaded', () => {
-  const generateBtn = document.getElementById('generate-btn');
-  const statusDiv = document.getElementById('status');
-  const levelSelect = document.getElementById('level-select');
-  const typeSelect = document.getElementById('type-select');
-  const filetypeSelect = document.getElementById('filetype-select');
-  const flashcardOptions = document.getElementById('flashcard-options');
+document.addEventListener("DOMContentLoaded", () => {
+  const generateBtn = document.getElementById("generate-btn");
+  const typeSelect = document.getElementById("type-select");
+  const levelSelect = document.getElementById("level-select");
+  const fileTypeSelect = document.getElementById("filetype-select");
+  const statusDiv = document.getElementById("status");
 
-  // Toggle flashcard file type dropdown
-  typeSelect.addEventListener('change', () => {
-    flashcardOptions.style.display = typeSelect.value === 'Flashcards' ? 'block' : 'none';
-  });
-
-  generateBtn.addEventListener('click', async () => {
-    statusDiv.textContent = '📄 Fetching selected PDF...';
-
+  generateBtn.addEventListener("click", async () => {
     try {
+      statusDiv.textContent = "📄 Extracting PDF content...";
+
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab) {
-        statusDiv.textContent = '❌ No active tab found.';
+      const [response] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        function: extractSelectedPdfBase64,
+      });
+
+      const pdfBase64 = response.result;
+      if (!pdfBase64) {
+        statusDiv.textContent = "⚠️ Failed to extract PDF data.";
         return;
       }
 
-      chrome.tabs.sendMessage(tab.id, { action: 'getSelectedPdfBase64' }, async (response) => {
-        if (chrome.runtime.lastError) {
-          statusDiv.textContent = `❌ Chrome error: ${chrome.runtime.lastError.message}`;
-          return;
-        }
+      const isFlashcards = typeSelect.value === "Flashcards";
+      const endpoint = isFlashcards
+        ? "http://localhost:5050/generate_flashcards"
+        : "http://localhost:5050/generate_blob";
 
-        if (!response || response.error) {
-          statusDiv.textContent = `❌ ${response?.error || 'Unknown error'}`;
-          return;
-        }
+      const payload = {
+        pdf_base64: pdfBase64,
+        level: levelSelect.value,
+      };
 
-        const payload = {
-          pdf_base64: response.pdfBase64,
-          level: levelSelect.value,
-          output_type: typeSelect.value,
-          file_type: filetypeSelect?.value || 'csv'
-        };
+      if (isFlashcards) {
+        payload.file_type = fileTypeSelect.value;
+      } else {
+        payload.output_type = typeSelect.value;
+      }
 
-        const endpoint = typeSelect.value === 'Flashcards'
-          ? 'http://localhost:5050/generate_flashcards'
-          : 'http://localhost:5050/generate_blob';
+      statusDiv.textContent = "⚙️ Generating study materials...";
 
-        statusDiv.textContent = '⚙️ Generating study materials...';
-
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        if (!res.ok) {
-          const errText = await res.text();
-          statusDiv.textContent = `❌ Backend error: ${errText}`;
-          return;
-        }
-
-        const blob = await res.blob();
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = typeSelect.value === 'Flashcards'
-          ? (payload.file_type === 'apkg' ? 'flashcards.apkg' : 'flashcards.csv')
-          : 'study_materials.pdf';
-        a.click();
-
-        statusDiv.textContent = '✅ Download ready!';
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
-    } catch (err) {
-      statusDiv.textContent = `❌ Unexpected error: ${err.message}`;
+
+      if (!res.ok) {
+        throw new Error(`Server error: ${res.status}`);
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+
+      const extension = isFlashcards
+        ? (fileTypeSelect.value === "apkg" ? "apkg" : "csv")
+        : "pdf";
+
+      link.download = `study_output.${extension}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+
+      statusDiv.textContent = "✅ Download complete!";
+    } catch (error) {
+      console.error("❌ Error:", error);
+      statusDiv.textContent = `❌ Error: ${error.message}`;
     }
   });
 });
+
+function extractSelectedPdfBase64() {
+  const selected = document.querySelector(".ef-item-row.ef-item-selected a");
+  if (!selected) return null;
+
+  return fetch(selected.href)
+    .then(res => res.blob())
+    .then(blob => {
+      return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64 = reader.result.split(",")[1]; // remove "data:application/pdf;base64,"
+          resolve(base64);
+        };
+        reader.readAsDataURL(blob);
+      });
+    });
+}
