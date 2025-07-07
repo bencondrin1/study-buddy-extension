@@ -38,7 +38,7 @@ def generate_study_materials(text: str, level: str, output_type: str) -> str:
     prompt = build_prompt(level, output_type, text)
 
     response = client.chat.completions.create(
-        model="gpt-4",  # switch to "gpt-3.5-turbo" if you want to save tokens/testing
+        model="gpt-3.5-turbo",  # switch to "gpt-3.5-turbo" if you want to save tokens/testing
         messages=[{"role": "user", "content": prompt}],
         max_tokens=2000,
         temperature=0.7,

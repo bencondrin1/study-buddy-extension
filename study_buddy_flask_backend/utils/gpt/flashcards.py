@@ -5,7 +5,10 @@ from openai import OpenAI, OpenAIError
 from dotenv import load_dotenv
 
 load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    raise ValueError("OPENAI_API_KEY environment variable is not set")
+client = OpenAI(api_key=api_key)
 
 
 def generate_flashcards(text, level="Basic"):
@@ -16,34 +19,26 @@ def generate_flashcards(text, level="Basic"):
     
     if level == "basic":
         prompt = (
-            f"Generate 10-25 basic conceptual flashcards based on the following content.\n\n"
-            f"Focus on:\n"
-            f"- Key definitions and concepts\n"
+            f"Generate a set of basic conceptual flashcards based on the following content.\n\n"
+            f"Focus ONLY on:\n"
+            f"- The most essential definitions and concepts\n"
             f"- Fundamental principles\n"
             f"- Basic terminology\n"
-            f"- Simple conceptual understanding\n\n"
-            f"AVOID:\n"
-            f"- Complex calculations\n"
-            f"- Detailed derivations\n"
-            f"- Advanced applications\n"
-            f"- Step-by-step problem solving\n\n"
+            f"- Simple, high-level understanding\n\n"
+            f"Do NOT include detailed examples, advanced applications, or step-by-step solutions.\n"
+            f"Imagine this is for a test that only covers the basic overview of the material.\n\n"
             f"Format each flashcard as:\n"
             f"Q: <question>\nA: <answer>\n\n"
             f"Text:\n{text}"
         )
     else:  # In-depth
         prompt = (
-            f"Generate comprehensive flashcards at an advanced level based on the following content. Create as many cards as needed to thoroughly cover all important concepts, examples, and applications.\n\n"
-            f"Include:\n"
-            f"- Detailed conceptual questions\n"
-            f"- Step-by-step problem solving\n"
-            f"- Mathematical derivations and proofs\n"
-            f"- Advanced applications and examples\n"
-            f"- Critical thinking questions\n"
-            f"- Connections between different concepts\n"
-            f"- Common mistakes and misconceptions\n"
-            f"- Real-world applications\n"
-            f"- All significant theorems, formulas, and methods\n\n"
+            f"Generate a comprehensive, exhaustive set of in-depth flashcards based on the following content.\n\n"
+            f"Your goal is to cover EVERYTHING that could reasonably appear on a thorough test of these notes.\n"
+            f"You MUST generate at least 2-4x as many flashcards as you would for a basic set.\n"
+            f"Be exhaustive: include every important concept, definition, principle, example, application, problem type, step-by-step solution, derivation, proof, formula, common mistake, misconception, subtle point, connection, and real-world application.\n"
+            f"If in doubt, add more cards. Err on the side of being too comprehensive.\n"
+            f"Imagine you are preparing someone for a comprehensive exam on this material.\n"
             f"Use LaTeX for mathematical expressions: $x^2$ for inline, $$\\int_0^1 x^2 dx$$ for display.\n\n"
             f"Format each flashcard as:\n"
             f"Q: <question>\nA: <answer>\n\n"
@@ -57,7 +52,8 @@ def generate_flashcards(text, level="Basic"):
             max_tokens=1500,
             temperature=0.7,
         )
-        return response.choices[0].message.content.strip()
+        content = response.choices[0].message.content
+        return content.strip() if content else ""
 
     except OpenAIError as e:
         print(f"❌ OpenAI API error: {e}")

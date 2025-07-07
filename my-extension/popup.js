@@ -2,7 +2,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const generateBtn = document.getElementById("generate-btn");
   const typeSelect = document.getElementById("type-select");
   const levelSelect = document.getElementById("level-select");
-  const fileTypeSelect = document.getElementById("filetype-select");
   const statusDiv = document.getElementById("status");
 
   generateBtn.addEventListener("click", async () => {
@@ -21,9 +20,12 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      const isFlashcards = typeSelect.value === "Flashcards";
+      const isFlashcards = typeSelect.value.startsWith("Flashcards");
+      const isPracticeExam = typeSelect.value === "Practice Exams";
       const endpoint = isFlashcards
         ? "http://localhost:5050/generate_flashcards"
+        : isPracticeExam
+        ? "http://localhost:5050/generate_practice_exam"
         : "http://localhost:5050/generate_blob";
 
       const payload = {
@@ -32,7 +34,10 @@ document.addEventListener("DOMContentLoaded", () => {
       };
 
       if (isFlashcards) {
-        payload.file_type = fileTypeSelect.value;
+        payload.file_type = "pdf";
+      } else if (isPracticeExam) {
+        payload.file_type = "pdf";
+        payload.exam_type = "Mixed";
       } else {
         payload.output_type = typeSelect.value;
       }
@@ -49,22 +54,43 @@ document.addEventListener("DOMContentLoaded", () => {
         throw new Error(`Server error: ${res.status}`);
       }
 
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-
-      const extension = isFlashcards
-        ? (fileTypeSelect.value === "apkg" ? "apkg" : "csv")
-        : "pdf";
-
-      link.download = `study_output.${extension}`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-
-      statusDiv.textContent = "✅ Download complete!";
+      if (isFlashcards) {
+        // Handle PDF download
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `flashcards.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        statusDiv.textContent = "✅ PDF file downloaded!";
+      } else if (isPracticeExam) {
+        // Handle practice exam PDF download
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `practice_exam.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        statusDiv.textContent = "✅ Practice exam downloaded!";
+      } else {
+        // Handle study guide/other downloads
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `study_output.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        statusDiv.textContent = "✅ Download complete!";
+      }
     } catch (error) {
       console.error("❌ Error:", error);
       statusDiv.textContent = `❌ Error: ${error.message}`;

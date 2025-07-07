@@ -58,22 +58,16 @@
   <label for="type-select">Choose study material:</label>
   <select id="type-select">
     <option value="Study Guide">Study Guide</option>
-    <option value="Flashcards">Flashcards</option>
+    <option value="Flashcards">Flashcards (PDF)</option>
     <option value="Practice Exams">Practice Exams</option>
     <option value="Diagrams">Diagrams</option>
   </select>
 
-  <div id="flashcard-options">
-    <label for="filetype-select">Flashcard File Type:</label>
-    <select id="filetype-select">
-      <option value="csv">CSV</option>
-      <option value="apkg">Anki (.apkg)</option>
-    </select>
-    <small>🔔 You need Anki installed to open .apkg files.</small>
-  </div>
-
   <button id="generate-btn">Generate</button>
   <div id="status"></div>
+  <div style="margin-top:10px; color:#2a6ebd; font-size:13px;">
+    You can upload this PDF to Quizlet using their import tools.
+  </div>
 
   <script src="popup.js"></script>
 </body>

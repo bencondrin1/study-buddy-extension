@@ -1,6 +1,7 @@
 import os
 import re
 import subprocess
+from typing import Callable
 from dotenv import load_dotenv
 from openai import OpenAI
 from io import BytesIO
@@ -14,7 +15,9 @@ if not api_key:
     raise ValueError("OPENAI_API_KEY environment variable is not set")
 client = OpenAI(api_key=api_key)
 
-def render_latex_with_katex(latex_expr, display_mode=False):
+def render_latex_with_katex(latex_expr: str, display_mode: bool = False) -> str:
+    if not latex_expr:
+        return ""
     try:
         if display_mode:
             latex_expr = f"\\displaystyle {latex_expr}"
@@ -30,13 +33,24 @@ def render_latex_with_katex(latex_expr, display_mode=False):
             input=latex_expr,
             capture_output=True,
             text=True,
-            check=True
+            check=True,
+            timeout=10  # Add timeout to prevent hanging
         )
         stdout = result.stdout
         return stdout.strip() if stdout else ""
     except subprocess.CalledProcessError as e:
         print(f"❌ KaTeX error: {e.stderr}")
         return f"<code>{latex_expr}</code>"
+    except subprocess.TimeoutExpired:
+        print(f"❌ KaTeX timeout for: {latex_expr}")
+        return f"<code>{latex_expr}</code>"
+    except Exception as e:
+        print(f"❌ Unexpected KaTeX error: {e}")
+        return f"<code>{latex_expr}</code>"
+    finally:
+        # Force garbage collection
+        import gc
+        gc.collect()
 
 def render_math_in_html(text: str) -> str:
     """
@@ -75,11 +89,14 @@ def get_title_from_text(text: str) -> str:
             return line.strip()[:60]
     return "Study Guide"
 
-def fallback_extract_text(pdf_bytes, extract_pdf_func, ocr_func):
+def fallback_extract_text(pdf_bytes: bytes, extract_pdf_func: Callable, ocr_func: Callable) -> str:
     """
     Tries to extract text from PDF bytes using the standard method.
     If no text or error, falls back to OCR.
     """
+    if not pdf_bytes:
+        return ocr_func(pdf_bytes)
+    
     try:
         text = extract_pdf_func(BytesIO(pdf_bytes))
         if text and text.strip():
