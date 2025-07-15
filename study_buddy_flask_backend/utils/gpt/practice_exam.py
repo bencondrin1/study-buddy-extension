@@ -400,11 +400,20 @@ def export_practice_exam_to_pdf(raw_text, level="Basic", exam_type="Mixed"):
     """
     Exports practice exam data to a PDF format with proper math rendering.
     """
+    import os
+    import sys
     from io import BytesIO
     from weasyprint import HTML
-    from utils.gpt.shared import render_math_in_html, get_title_from_text
     import re
     import gc
+    
+    # Add the parent directory to the Python path so we can import utils
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(os.path.dirname(current_dir))
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+    
+    from utils.gpt.shared import render_math_in_html, get_title_from_text
     
     if not raw_text:
         return BytesIO()

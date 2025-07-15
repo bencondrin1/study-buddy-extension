@@ -12,13 +12,21 @@ from pptx.shapes.placeholder import SlidePlaceholder
 from pptx.shapes.autoshape import Shape
 import re
 import subprocess
+import os
+import sys
 from PIL import Image
 import cairosvg  # type: ignore
-import os
 import math
 from markdown import markdown
 from weasyprint import HTML
-from utils.gpt.shared import render_math_in_html
+
+# Add the parent directory to the Python path so we can import utils
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
+from utils.gpt.shared import render_math_in_html, generate_ai_title
 
 
 def export_flashcards_to_csv(flashcards: List[Tuple[str, str]]) -> BytesIO:
@@ -334,3 +342,116 @@ def export_flashcards_to_pdf(flashcards: List[Tuple[str, str]]) -> BytesIO:
     HTML(string=full_html).write_pdf(pdf_buffer)
     pdf_buffer.seek(0)
     return pdf_buffer
+
+
+def export_flashcards_to_anki_tsv(flashcards):
+    from io import BytesIO
+    buffer = BytesIO()
+    for q, a in flashcards:
+        buffer.write(f"{q}\t{a}\n".encode("utf-8"))
+    buffer.seek(0)
+    return buffer
+
+
+def process_latex_for_anki(text):
+    """
+    Converts LaTeX expressions to Anki's LaTeX format.
+    """
+    import re
+    
+    # Convert inline LaTeX ($...$) to Anki format
+    text = re.sub(r'\$([^$]+)\$', r'\(\1\)', text)
+    
+    # Convert display LaTeX ($$...$$) to Anki format
+    text = re.sub(r'\$\$([^$]+)\$\$', r'\[\1\]', text)
+    
+    return text
+
+
+def export_flashcards_to_anki_apkg(flashcards):
+    """
+    Exports flashcards as a proper Anki .apkg file using genanki library.
+    """
+    try:
+        import genanki
+        from io import BytesIO
+        import random
+        from utils.gpt.shared import generate_ai_title
+        
+        # Generate AI title based on flashcard content
+        content_sample = ""
+        for i, (q, a) in enumerate(flashcards[:3]):  # Use first 3 cards for context
+            content_sample += f"Q: {q}\nA: {a}\n"
+        
+        deck_title = generate_ai_title(content_sample, "flashcard deck")
+        
+        # Create a unique model ID for the card type
+        model_id = random.randrange(1 << 30, 1 << 31)
+        
+        # Create a simple card model (front and back) with LaTeX support
+        model = genanki.Model(
+            model_id,
+            'Simple Model',
+            fields=[
+                {'name': 'Question'},
+                {'name': 'Answer'},
+            ],
+            templates=[
+                {
+                    'name': 'Card 1',
+                    'qfmt': '{{Question}}',
+                    'afmt': '{{FrontSide}}<hr id="answer">{{Answer}}',
+                },
+            ],
+            css='''
+            .card {
+                font-family: arial;
+                font-size: 20px;
+                text-align: center;
+                color: black;
+                background-color: white;
+            }
+            '''
+        )
+        
+        # Create a deck with AI-generated title
+        deck_id = random.randrange(1 << 30, 1 << 31)
+        deck = genanki.Deck(deck_id, deck_title)
+        
+        # Add cards to the deck with LaTeX processing
+        for question, answer in flashcards:
+            # Convert LaTeX to Anki format
+            processed_question = process_latex_for_anki(question)
+            processed_answer = process_latex_for_anki(answer)
+            
+            note = genanki.Note(
+                model=model,
+                fields=[processed_question, processed_answer]
+            )
+            deck.add_note(note)
+        
+        # Create the package
+        package = genanki.Package(deck)
+        
+        # Generate the .apkg file in memory
+        buffer = BytesIO()
+        package.write_to_file(buffer)
+        buffer.seek(0)
+        
+        return buffer
+        
+    except ImportError:
+        # Fallback to TSV if genanki is not installed
+        print("⚠️ genanki library not found. Installing...")
+        import subprocess
+        import sys
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "genanki"])
+            # Retry after installation
+            return export_flashcards_to_anki_apkg(flashcards)
+        except:
+            print("❌ Failed to install genanki. Falling back to TSV format.")
+            return export_flashcards_to_anki_tsv(flashcards)
+    except Exception as e:
+        print(f"❌ Error creating Anki package: {e}. Falling back to TSV format.")
+        return export_flashcards_to_anki_tsv(flashcards)

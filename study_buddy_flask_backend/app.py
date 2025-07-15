@@ -10,10 +10,11 @@ import multiprocessing
 # Utilities
 from utils.pdf_utils import extract_text_from_pdf
 from utils.ocr_utils import extract_text_with_vision
-from utils.flashcard_utils import export_flashcards_to_pdf
+from utils.flashcard_utils import export_flashcards_to_pdf, export_flashcards_to_anki_apkg
 from utils.gpt.flashcards import generate_flashcards, parse_flashcards
 from utils.gpt.study_guide import generate_study_materials_as_pdf
 from utils.gpt.practice_exam import generate_practice_exam, parse_practice_exam, export_practice_exam_to_pdf
+from utils.gpt.diagrams import generate_diagrams_as_pdf
 
 # Flask setup
 app = Flask(__name__)
@@ -70,6 +71,10 @@ def generate_flashcards_endpoint():
             buffer = export_flashcards_to_pdf(flashcards)
             mimetype = "application/pdf"
             filename = "flashcards.pdf"
+        elif file_type == "anki":
+            buffer = export_flashcards_to_anki_apkg(flashcards)
+            mimetype = "application/x-apkg"
+            filename = "flashcards_for_anki.apkg"
         elif file_type == "copy":
             # Return flashcards as JSON for clipboard copying
             return jsonify({
@@ -96,6 +101,7 @@ def generate_blob_endpoint():
         pdf_base64 = data.get("pdf_base64")
         level = data.get("level", "Basic")
         output_type = data.get("output_type", "Study Guide")
+        diagram_type = data.get("diagram_type", "general")
 
         if not pdf_base64:
             return jsonify({"error": "No PDF data provided"}), 400
@@ -104,13 +110,19 @@ def generate_blob_endpoint():
         text = fallback_extract_text(pdf_bytes)
 
         print(f"🧠 Generating {output_type} ({level})...")
-        pdf_buffer = generate_study_materials_as_pdf(text, level, output_type)
+        
+        if output_type == "Diagrams":
+            pdf_buffer = generate_diagrams_as_pdf(text, level, diagram_type)
+            filename = "diagrams.pdf"
+        else:
+            pdf_buffer = generate_study_materials_as_pdf(text, level, output_type)
+            filename = "study_materials.pdf"
 
         return send_file(
             pdf_buffer,
             mimetype="application/pdf",
             as_attachment=True,
-            download_name="study_materials.pdf",
+            download_name=filename,
         )
 
     except Exception as e:

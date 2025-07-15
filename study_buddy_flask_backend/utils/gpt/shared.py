@@ -55,7 +55,7 @@ def render_latex_with_katex(latex_expr: str, display_mode: bool = False) -> str:
 def render_math_in_html(text: str) -> str:
     """
     Finds LaTeX math blocks in text and replaces them with KaTeX-rendered HTML.
-    Supports inline \( ... \), display \[ ... \], and $$ ... $$.
+    Supports inline \\( ... \\), display \\[ ... \\], and $$ ... $$.
     """
     patterns = [
         (r"\\\[(.+?)\\\]", True),
@@ -80,14 +80,59 @@ def render_math_in_html(text: str) -> str:
 def highlight_gpt_insertions(html: str) -> str:
     return re.sub(r"\[\[GPT:(.+?)\]\]", r"<span style='color: red;'>\1</span>", html)
 
+def generate_ai_title(text: str, content_type: str = "study material") -> str:
+    """
+    Generates an AI-powered title based on the content.
+    """
+    if not text or len(text.strip()) < 10:
+        return f"{content_type.title()}"
+    
+    try:
+        # Take first 500 characters for context
+        context = text[:500].strip()
+        
+        prompt = f"""Based on the following content, generate a concise, descriptive title (max 60 characters) for a {content_type}.
+        
+        Content preview:
+        {context}
+        
+        Generate only the title, nothing else. Make it specific and informative."""
+        
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=50,
+            temperature=0.3,
+        )
+        
+        title = response.choices[0].message.content.strip() if response.choices[0].message.content else ""
+        # Clean up the title
+        title = re.sub(r'["\']', '', title)  # Remove quotes
+        title = title[:60]  # Limit to 60 characters
+        
+        return title if title else f"{content_type.title()}"
+        
+    except Exception as e:
+        print(f"❌ Error generating AI title: {e}")
+        return get_title_from_text(text)
+
 def get_title_from_text(text: str) -> str:
+    """
+    Gets a title from text, with AI enhancement when possible.
+    """
     if not text:
         return "Study Guide"
-    text_stripped = text.strip()
-    for line in text_stripped.splitlines():
-        if line and line.strip():
-            return line.strip()[:60]
-    return "Study Guide"
+    
+    # Try AI generation first
+    try:
+        return generate_ai_title(text, "study material")
+    except:
+        # Fallback to simple extraction
+        text_stripped = text.strip()
+        for line in text_stripped.splitlines():
+            if line and line.strip():
+                return line.strip()[:60]
+        return "Study Guide"
 
 def fallback_extract_text(pdf_bytes: bytes, extract_pdf_func: Callable, ocr_func: Callable) -> str:
     """

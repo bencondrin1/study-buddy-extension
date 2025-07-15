@@ -1,8 +1,17 @@
 # utils/gpt/study_guide.py
 
+import os
+import sys
 from markdown import markdown
 from io import BytesIO
 from weasyprint import HTML
+
+# Add the parent directory to the Python path so we can import utils
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(os.path.dirname(current_dir))
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
 from utils.gpt.shared import client, render_math_in_html, highlight_gpt_insertions, get_title_from_text
 
 def build_prompt(level: str, output_type: str, text: str) -> str:
