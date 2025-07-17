@@ -8,6 +8,9 @@ import os
 import sys
 from io import BytesIO
 from weasyprint import HTML
+import cairosvg
+import random
+from PIL import Image  # Added for PNG resizing
 
 # Add the parent directory to the Python path so we can import utils
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -50,7 +53,8 @@ def build_diagram_prompt(level: str, text: str, diagram_type: str = "general") -
         base += (
             "Focus on creating flowcharts that show processes, decision flows, and step-by-step procedures.\n"
             "Use flowchart syntax: graph TD for top-down, graph LR for left-right, graph BT for bottom-up.\n"
-            "Include decision points with diamond shapes and process steps with rectangles.\n"
+            "Include decision points with diamond shapes (e.g., B{Decision}), process steps with rectangles (A[Step]), and circles (C((Circle))).\n"
+            "Vary node shapes for visual interest.\n"
         )
     elif diagram_type == "mindmap":
         base += (
@@ -91,6 +95,9 @@ def build_diagram_prompt(level: str, text: str, diagram_type: str = "general") -
             "Focus on the most important concepts only.\n"
             "Use clear, descriptive labels.\n"
             "Limit complexity - aim for 3-5 main elements per diagram.\n"
+            "Always use 'graph TD' for a top-down flowchart.\n"
+            "Vary node shapes: use rectangles (A[Step]), circles (B((Circle))), and diamonds (C{Decision}).\n"
+            "Do NOT use mindmaps or sequence diagrams for basic diagrams.\n"
         )
     else:  # In-Depth
         guidance = (
@@ -99,6 +106,7 @@ def build_diagram_prompt(level: str, text: str, diagram_type: str = "general") -
             "Show detailed processes and sub-steps.\n"
             "Include additional context and background information.\n"
             "Use more sophisticated diagram structures when appropriate.\n"
+            "Vary node shapes for visual interest.\n"
         )
     
     format_instructions = (
@@ -111,12 +119,15 @@ def build_diagram_prompt(level: str, text: str, diagram_type: str = "general") -
         "## [Diagram Title]\n"
         "[Brief explanation]\n"
         "```mermaid\n"
-        "[mermaid code]\n"
+        "graph TD\n"
+        "A[Start] --> B{Decision}\n"
+        "B --> C((Circle))\n"
+        "C --> D[End]\n"
         "```\n\n"
         "IMPORTANT: Generate 1-2 diagrams that best represent the key concepts.\n"
         "Focus on creating diagrams that show relationships, processes, or hierarchies.\n"
         "Even simple concepts can benefit from visual representation.\n"
-        "If the content is very basic, create a simple flowchart or mind map.\n"
+        "If the content is very basic, create a simple flowchart.\n"
         "Each diagram should help with understanding and memorization.\n"
     )
     
@@ -124,15 +135,7 @@ def build_diagram_prompt(level: str, text: str, diagram_type: str = "general") -
 
 def generate_diagrams(text: str, level: str, diagram_type: str = "general") -> str:
     """Generate diagrams from text content using GPT."""
-    print(f"🔍 DEBUG: Starting diagram generation")
-    print(f"🔍 DEBUG: Input text length: {len(text)} characters")
-    print(f"🔍 DEBUG: Level: {level}, Diagram type: {diagram_type}")
-    print(f"🔍 DEBUG: Input text preview: {text[:200]}...")
-    
     prompt = build_diagram_prompt(level, text, diagram_type)
-    print(f"🔍 DEBUG: Prompt length: {len(prompt)} characters")
-    print(f"🔍 DEBUG: Prompt preview: {prompt[:500]}...")
-    
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}],
@@ -141,131 +144,75 @@ def generate_diagrams(text: str, level: str, diagram_type: str = "general") -> s
     )
     content = response.choices[0].message.content
     result = content.strip() if content else ""
-    
-    print(f"🔍 DEBUG: Raw GPT response length: {len(result)} characters")
-    print(f"🔍 DEBUG: Raw GPT response:")
-    print("=" * 60)
-    print(result)
-    print("=" * 60)
-    
     return result
 
 def clean_mermaid_code(mermaid_code: str) -> str:
-    """Clean Mermaid code to remove problematic syntax."""
-    print(f"🔍 DEBUG: Starting Mermaid code cleaning")
-    print(f"🔍 DEBUG: Original code length: {len(mermaid_code)}")
-    print(f"🔍 DEBUG: Original code:")
-    print("-" * 40)
-    print(mermaid_code)
-    print("-" * 40)
-    
+    """Clean Mermaid code to remove problematic syntax, aggressively sanitize node labels, and enforce valid structure."""
     # Remove problematic note syntax that causes parsing errors
     mermaid_code = re.sub(r'note\s+(?:right|left|top|bottom)\s+of\s+[^:]+:\s*[^\n]+', '', mermaid_code)
-    
     # Remove complex relationship labels with special characters
     mermaid_code = re.sub(r'"[^"]*[^\w\s][^"]*"\s*--\s*"[^"]*[^\w\s][^"]*"', '', mermaid_code)
-    
-    # Remove lines with complex annotations or special characters
     lines = mermaid_code.split('\n')
     cleaned_lines = []
     removed_nodes = set()
-    
-    print(f"🔍 DEBUG: Processing {len(lines)} lines")
-    
+    node_counter = 1
     for i, line in enumerate(lines):
-        print(f"🔍 DEBUG: Processing line {i+1}: '{line.strip()}'")
-        
-        # Skip lines with complex annotations, notes, or special characters
+        # Aggressively replace node labels with non-alphanumeric chars (except spaces)
+        node_label_pattern = re.compile(r'(\w+)\[([^\]]+)\]')
+        def replace_label(match):
+            label = match.group(2)
+            if re.search(r'[^a-zA-Z0-9 ]', label):
+                nonlocal node_counter
+                new_label = f'Concept {node_counter}'
+                node_counter += 1
+                return f'{match.group(1)}[{new_label}]'
+            return match.group(0)
+        line = node_label_pattern.sub(replace_label, line)
+        # Remove lines with complex annotations, notes, or special characters
         if any(skip_pattern in line.lower() for skip_pattern in ['note ', 'ξ', '′′', '′′′′', 'f′′', 'f′′′′']):
-            print(f"🔍 DEBUG: Removing line {i+1} (complex annotations): {line.strip()}")
-            # Extract node name if this line defines a node
             node_match = re.search(r'^(\w+)\[', line)
             if node_match:
                 removed_nodes.add(node_match.group(1))
-                print(f"🔍 DEBUG: Added {node_match.group(1)} to removed_nodes")
             continue
-        
-        # Skip lines with mathematical expressions or special characters
         if re.search(r'[∫∑∏√∞≠≤≥±×÷∂∇∆∈∉∋∌∩∪⊂⊃⊆⊇⊕⊗∀∃∄∴∵∝∞θαβγδεζηθικλμνξοπρστυφχψω]', line):
-            print(f"🔍 DEBUG: Removing line {i+1} (math symbols): {line.strip()}")
-            # Extract node name if this line defines a node
             node_match = re.search(r'^(\w+)\[', line)
             if node_match:
                 removed_nodes.add(node_match.group(1))
-                print(f"🔍 DEBUG: Added {node_match.group(1)} to removed_nodes")
             continue
-        
-        # Skip lines with very complex mathematical expressions (but be more selective)
-        # Only remove lines with actual mathematical symbols or very complex formulas
-        if re.search(r'[∫∑∏√∞≠≤≥±×÷∂∇∆∈∉∋∌∩∪⊂⊃⊆⊇⊕⊗∀∃∄∴∵∝∞θαβγδεζηθικλμνξοπρστυφχψω]', line):
-            print(f"🔍 DEBUG: Removing line {i+1} (math symbols): {line.strip()}")
-            # Extract node name if this line defines a node
-            node_match = re.search(r'^(\w+)\[', line)
-            if node_match:
-                removed_nodes.add(node_match.group(1))
-                print(f"🔍 DEBUG: Added {node_match.group(1)} to removed_nodes")
-            continue
-        
-        # Only remove lines with very specific problematic patterns, not all function calls
         if re.search(r'f\([^)]*\)[^)]*\([^)]*\)', line) or re.search(r'[a-z]\([^)]*[^a-zA-Z0-9\s][^)]*\)[^)]*\([^)]*\)', line):
-            print(f"🔍 DEBUG: Removing line {i+1} (complex expressions): {line.strip()}")
-            # Extract node name if this line defines a node
             node_match = re.search(r'^(\w+)\[', line)
             if node_match:
                 removed_nodes.add(node_match.group(1))
-                print(f"🔍 DEBUG: Added {node_match.group(1)} to removed_nodes")
             continue
-        
-        print(f"🔍 DEBUG: Keeping line {i+1}: '{line.strip()}'")
         cleaned_lines.append(line)
-    
-    # Remove references to deleted nodes
-    final_lines = []
-    print(f"🔍 DEBUG: Removing references to {len(removed_nodes)} deleted nodes: {removed_nodes}")
-    
+    # Structural validation: only keep valid Mermaid lines
+    valid_lines = []
+    header_pattern = re.compile(r'^(graph|flowchart)\s+(TD|LR|BT|RL)?', re.IGNORECASE)
+    node_pattern = re.compile(r'^[A-Za-z0-9_]+\[[^\]]+\]$')
+    edge_pattern = re.compile(r'^[A-Za-z0-9_]+\s*--[->|o]?\s*[A-Za-z0-9_]+(\[[^\]]+\])?$')
+    comment_pattern = re.compile(r'^%%')
     for line in cleaned_lines:
-        # Check if line references a removed node
-        if any(f"{node} -->" in line or f"--> {node}" in line for node in removed_nodes):
-            print(f"🔍 DEBUG: Removing broken reference: {line.strip()}")
+        line = line.strip()
+        if not line:
+            valid_lines.append(line)
             continue
-        # Also check for orphaned references (like "E --> F" where E was removed)
-        arrow_match = re.search(r'(\w+)\s*-->\s*(\w+)', line)
-        if arrow_match:
-            from_node, to_node = arrow_match.groups()
-            if from_node in removed_nodes or to_node in removed_nodes:
-                print(f"🔍 DEBUG: Removing orphaned reference: {line.strip()}")
-                continue
-        final_lines.append(line)
-    
-    cleaned_code = '\n'.join(final_lines).strip()
-    
-    # Additional cleaning: replace complex node labels with simple ones
-    # Only replace labels that contain actual mathematical symbols, not all special characters
-    cleaned_code = re.sub(r'\(\([^)]*[∫∑∏√∞≠≤≥±×÷∂∇∆∈∉∋∌∩∪⊂⊃⊆⊇⊕⊗∀∃∄∴∵∝∞θαβγδεζηθικλμνξοπρστυφχψω][^)]*\)\)', '(Simple Node)', cleaned_code)
-    cleaned_code = re.sub(r'\[[^\]]*[∫∑∏√∞≠≤≥±×÷∂∇∆∈∉∋∌∩∪⊂⊃⊆⊇⊕⊗∀∃∄∴∵∝∞θαβγδεζηθικλμνξοπρστυφχψω][^\]]*\]', '[Simple Node]', cleaned_code)
-    
-    # CRITICAL FIX: If we removed too many nodes and left only orphaned arrows, 
-    # create a simple fallback diagram instead of returning broken code
-    if len(cleaned_code.strip()) < 50 and '-->' in cleaned_code:
-        print(f"🔍 DEBUG: Cleaning removed too much content, creating fallback diagram")
-        # Check if we have any remaining node definitions
-        remaining_nodes = re.findall(r'(\w+)\[', cleaned_code)
-        print(f"🔍 DEBUG: Remaining nodes: {remaining_nodes}")
-        if len(remaining_nodes) < 2:
-            # Create a simple fallback diagram
-            cleaned_code = """graph TD
-    A[Integration Methods] --> B[Trapezoidal Rule]
-    A --> C[Simpson's Rule]
-    B --> D[Numerical Approximation]
-    C --> D"""
-            print(f"🔍 DEBUG: Created fallback diagram")
-    
-    print(f"🔍 DEBUG: Final cleaned code length: {len(cleaned_code)}")
-    print(f"🔍 DEBUG: Final cleaned code:")
-    print("-" * 40)
-    print(cleaned_code)
-    print("-" * 40)
-    
+        if header_pattern.match(line):
+            valid_lines.append(line)
+            continue
+        if node_pattern.match(line):
+            valid_lines.append(line)
+            continue
+        if edge_pattern.match(line):
+            valid_lines.append(line)
+            continue
+        if comment_pattern.match(line):
+            valid_lines.append(line)
+            continue
+        # If line does not match any valid pattern, skip it
+    cleaned_code = '\n'.join(valid_lines).strip()
+    # If cleaning removed too much, fallback to a simple diagram
+    if len(cleaned_code.strip()) < 50 or not re.search(r'(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|gitgraph|mindmap)', cleaned_code, re.IGNORECASE):
+        cleaned_code = """graph TD\n    A[Concept 1] --> B[Concept 2]\n    B --> C[Concept 3]\n    C --> D[Concept 4]"""
     return cleaned_code
 
 def ensure_flowchart_node_labels(mermaid_code: str) -> str:
@@ -286,60 +233,28 @@ def ensure_flowchart_node_labels(mermaid_code: str) -> str:
 
 def extract_mermaid_diagrams(markdown_content: str) -> list:
     """Extract Mermaid diagrams from markdown content."""
-    print(f"🔍 DEBUG: Starting diagram extraction")
-    print(f"🔍 DEBUG: Input markdown length: {len(markdown_content)} characters")
-    print(f"🔍 DEBUG: Input markdown preview: {markdown_content[:500]}...")
-    
     diagrams = []
     pattern = r'##\s*(.*?)\n(.*?)\n```mermaid\n(.*?)```'
     matches = re.findall(pattern, markdown_content, re.DOTALL)
-    
-    print(f"🔍 DEBUG: Found {len(matches)} potential diagram matches")
     for i, (title, description, mermaid_code) in enumerate(matches, 1):
-        print(f"🔍 DEBUG: Match {i}: '{title.strip()}' (code length: {len(mermaid_code.strip())})")
-        print(f"🔍 DEBUG: Match {i} description: {description.strip()}")
-        print(f"🔍 DEBUG: Match {i} mermaid code preview: {mermaid_code.strip()[:200]}...")
-    
-    for i, (title, description, mermaid_code) in enumerate(matches, 1):
-        print(f"🔍 DEBUG: Processing match {i}...")
-        
-        # Clean and validate the extracted content
+        # Remove surrounding brackets from title if present
         title = title.strip()
+        if title.startswith('[') and title.endswith(']'):
+            title = title[1:-1].strip()
         description = description.strip()
         original_mermaid_code = mermaid_code.strip()
-        # BYPASS CLEANING FUNCTION FOR TESTING
-        mermaid_code = original_mermaid_code  # skip cleaning for now
-        # mermaid_code = clean_mermaid_code(original_mermaid_code)
-        
-        print(f"🔍 DEBUG: Match {i} - Original code length: {len(original_mermaid_code)}")
-        print(f"🔍 DEBUG: Match {i} - Cleaned code length: {len(mermaid_code)}")
-        
-        # Skip empty or invalid diagrams
+        mermaid_code = original_mermaid_code
         if not title or not mermaid_code or len(mermaid_code) < 10:
-            print(f"🔍 DEBUG: Skipping invalid diagram {i}: '{title}' (code length: {len(mermaid_code)})")
-            print(f"🔍 DEBUG: Title empty: {not title}")
-            print(f"🔍 DEBUG: Code empty: {not mermaid_code}")
-            print(f"🔍 DEBUG: Code too short: {len(mermaid_code) < 10}")
             continue
-        
-        # Validate that the Mermaid code contains actual diagram syntax
         valid_diagram_types = ['graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'erDiagram', 'journey', 'gantt', 'pie', 'gitgraph', 'mindmap']
         has_valid_syntax = any(diagram_type in mermaid_code.lower() for diagram_type in valid_diagram_types)
-        print(f"🔍 DEBUG: Match {i} - Has valid syntax: {has_valid_syntax}")
-        
         if not has_valid_syntax:
-            print(f"🔍 DEBUG: Skipping diagram {i} with invalid syntax: '{title}'")
-            print(f"🔍 DEBUG: Diagram code: {mermaid_code}")
             continue
-        
         diagrams.append({
             'title': title,
             'description': description,
             'mermaid_code': mermaid_code
         })
-        print(f"🔍 DEBUG: Added diagram {i}: '{title}'")
-    
-    print(f"🔍 DEBUG: Extracted {len(diagrams)} valid diagrams from GPT response")
     return diagrams
 
 def sanitize_mermaid_code(mermaid_code: str) -> str:
@@ -366,24 +281,13 @@ def sanitize_mermaid_code(mermaid_code: str) -> str:
 def convert_mermaid_to_svg(mermaid_code: str) -> str:
     """Convert Mermaid code to SVG using mermaid-cli."""
     try:
-        # Clean and validate the Mermaid code
         mermaid_code = mermaid_code.strip()
         if not mermaid_code or len(mermaid_code) < 10:
-            print("❌ Mermaid code too short or empty")
             return ""
-        
-        # Create a temporary file for the mermaid code
         with tempfile.NamedTemporaryFile(mode='w', suffix='.mmd', delete=False) as f:
             f.write(mermaid_code)
             mermaid_file = f.name
-        
-        # Create output file
         svg_file = mermaid_file.replace('.mmd', '.svg')
-        
-        print(f"🔄 Converting Mermaid diagram...")
-        print(f"   Input length: {len(mermaid_code)} characters")
-        
-        # Use mmdc (mermaid-cli) to convert to SVG
         result = subprocess.run([
             'mmdc', 
             '-i', mermaid_file, 
@@ -391,78 +295,36 @@ def convert_mermaid_to_svg(mermaid_code: str) -> str:
             '-b', 'transparent',
             '-w', '800'
         ], capture_output=True, text=True, timeout=30)
-        
+        svg_content = ""
         if result.returncode == 0 and os.path.exists(svg_file):
             with open(svg_file, 'r') as f:
                 svg_content = f.read()
-            
-            # Validate SVG content
-            if '<svg' in svg_content and len(svg_content) > 100:
-                print(f"✅ Successfully converted to SVG ({len(svg_content)} characters)")
-                # Clean up temp files
-                os.remove(mermaid_file)
-                os.remove(svg_file)
-                return svg_content
-            else:
-                print(f"❌ Generated SVG is invalid or too small")
-                print(f"   SVG content preview: {svg_content[:200]}...")
-        else:
-            print(f"❌ Mermaid conversion failed:")
-            print(f"   Return code: {result.returncode}")
-            print(f"   stderr: {result.stderr}")
-            print(f"   stdout: {result.stdout}")
-        
         # Clean up temp files
         if os.path.exists(mermaid_file):
             os.remove(mermaid_file)
         if os.path.exists(svg_file):
             os.remove(svg_file)
-        return ""
-            
+        return svg_content if '<svg' in svg_content and len(svg_content) > 100 else ""
     except subprocess.TimeoutExpired:
-        print("❌ Mermaid conversion timed out")
         return ""
-    except Exception as e:
-        print(f"❌ Error converting Mermaid to SVG: {e}")
+    except Exception:
         return ""
 
 def generate_diagrams_as_pdf(text: str, level: str, diagram_type: str = "general") -> BytesIO:
     """Generate diagrams and return as PDF."""
-    print(f"🔍 DEBUG: Starting PDF generation")
-    print(f"🔍 DEBUG: Input text length: {len(text)} characters")
-    print(f"🔍 DEBUG: Level: {level}, Diagram type: {diagram_type}")
-    print(f"🔍 DEBUG: Content preview: {text[:200]}...")
-    
     raw_content = generate_diagrams(text, level, diagram_type)
-    print(f"🔍 DEBUG: GPT response length: {len(raw_content)} characters")
-    print(f"🔍 DEBUG: GPT response preview: {raw_content[:500]}...")
-    
     diagrams = extract_mermaid_diagrams(raw_content)
-    print(f"🔍 DEBUG: Final diagrams count: {len(diagrams)}")
-    
     if not diagrams:
-        print("🔍 DEBUG: No valid diagrams generated.")
-        print(f"🔍 DEBUG: Content length: {len(text.strip())} characters")
-        print(f"🔍 DEBUG: Content preview: {text.strip()[:100]}...")
-        
-        # Only create fallback if we have some content to work with
         if len(text.strip()) > 50:
-            print("🔍 DEBUG: Creating a simple concept overview...")
             diagrams = [{
                 'title': 'Concept Overview',
                 'description': 'A basic overview of the main concepts from the provided content',
                 'mermaid_code': 'graph TD\n    A[Main Concept] --> B[Sub Concept 1]\n    A --> C[Sub Concept 2]\n    B --> D[Detail 1]\n    C --> E[Detail 2]'
             }]
         else:
-            print("🔍 DEBUG: Content too short for meaningful diagram generation")
             diagrams = []
-    
-    # Generate AI title
     title = generate_ai_title(text, "diagram set")
-    
-    # Handle case where no diagrams were generated
     if not diagrams:
-        # Create a simple message instead of diagrams
         full_html = f"""
         <html>
         <head>
@@ -497,7 +359,7 @@ def generate_diagrams_as_pdf(text: str, level: str, diagram_type: str = "general
         </head>
         <body>
             <h1>{title}</h1>
-            <div class="message">
+            <div class=\"message\">
                 <p>No diagrams could be generated from the provided content.</p>
                 <p>The content may be too simple, too short, or lack clear relationships that can be visualized.</p>
                 <p>Try selecting a different diagram type or using content with more complex concepts and relationships.</p>
@@ -505,66 +367,100 @@ def generate_diagrams_as_pdf(text: str, level: str, diagram_type: str = "general
         </body>
         </html>
         """
-        
         pdf_buffer = BytesIO()
         HTML(string=full_html).write_pdf(pdf_buffer)
         pdf_buffer.seek(0)
         return pdf_buffer
-    
-    # Build HTML with embedded diagrams
-    diagram_html = ""
+    diagram_blocks = []
+    FONTS = [
+        "Arial, sans-serif",
+        "Georgia, serif",
+        "Courier New, monospace",
+        "Verdana, Geneva, sans-serif",
+        "Times New Roman, Times, serif"
+    ]
+    COLORS = [
+        {"primaryColor": "#90caf9", "nodeTextColor": "#1a237e", "lineColor": "#1976d2"},
+        {"primaryColor": "#f48fb1", "nodeTextColor": "#880e4f", "lineColor": "#ad1457"},
+        {"primaryColor": "#a5d6a7", "nodeTextColor": "#1b5e20", "lineColor": "#388e3c"},
+        {"primaryColor": "#ffe082", "nodeTextColor": "#ff6f00", "lineColor": "#ffa000"},
+        {"primaryColor": "#b0bec5", "nodeTextColor": "#263238", "lineColor": "#455a64"},
+    ]
+    THEMES = ['default', 'forest', 'dark', 'neutral']
     for i, diagram in enumerate(diagrams, 1):
-        print(f"🔄 Processing diagram {i}: {diagram['title']}")
-        
-        # Validate the Mermaid code before conversion
         mermaid_code = diagram['mermaid_code']
-        
-        # Sanitize Mermaid code to avoid parse errors
+        mermaid_code = clean_mermaid_code(mermaid_code)
         mermaid_code = sanitize_mermaid_code(mermaid_code)
-        # Ensure all flowchart nodes have labels
         mermaid_code = ensure_flowchart_node_labels(mermaid_code)
-        
-        # DEBUG: Print the final Mermaid code before PNG conversion
-        print(f"🔍 FINAL Mermaid code for diagram {i}:\n{mermaid_code}\n{'-'*40}")
-        
-        # Use mmdc to export PNG from Mermaid code
-        import os
-        import subprocess
+        # Use 'default' theme and force 'graph TD' for basic diagrams
+        if level.lower() == 'basic':
+            theme = 'default'
+            # Ensure the diagram starts with 'graph TD'
+            lines = mermaid_code.strip().split('\n')
+            if not lines[0].strip().lower().startswith('graph td'):
+                # Replace first line with 'graph TD' if it's a graph/flowchart
+                if lines[0].strip().lower().startswith(('graph', 'flowchart')):
+                    lines[0] = 'graph TD'
+                else:
+                    lines = ['graph TD'] + lines
+            mermaid_code = '\n'.join(lines)
+            font = random.choice(FONTS)
+        else:
+            theme = random.choice(THEMES)
+            font = random.choice(FONTS)
+        init_block = (
+            f"%%{{init: {{'theme': '{theme}', 'themeVariables': {{'fontSize': '20px', 'fontFamily': '{font}', 'nodeSpacing': 40, 'rankSpacing': 40}} }} }}%%\n"
+        )
+        if not mermaid_code.strip().startswith('%%{init:'):
+            mermaid_code = init_block + mermaid_code
         mmd_path = f'diagram_{i}.mmd'
         png_path = f'diagram_{i}.png'
         with open(mmd_path, 'w') as f:
             f.write(mermaid_code)
+        # Use mmdc to generate very high-res PNG
         result_png = subprocess.run([
-            'mmdc', '-i', mmd_path, '-o', png_path, '-w', '800', '-H', '600'
+            'mmdc', '-i', mmd_path, '-o', png_path, '-w', '2400', '-H', '1800'
         ], capture_output=True, text=True)
+        diagram_img_html = ""
         if result_png.returncode == 0 and os.path.exists(png_path):
-            print(f"✅ Diagram {i} converted to PNG with mmdc")
-            diagram_abs_path = os.path.abspath(png_path)
-            data_uri = f"file://{diagram_abs_path}"
-            diagram_html += f"""
-            <div class=\"diagram-container\">
-                <h2>{diagram['title']}</h2>
-                <p class=\"diagram-description\">{diagram['description']}</p>
-                <div class=\"diagram-svg\">
-                    <img src=\"{data_uri}\" alt=\"{diagram['title']}\" style=\"max-width: 700px; width: 100%; height: auto; display: block; margin: 0 auto;\" />
-                </div>
-            </div>
-            """
+            # Downscale the PNG to fit within max PDF dimensions (600x800)
+            try:
+                with Image.open(png_path) as img:
+                    max_width, max_height = 600, 800
+                    img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
+                    # Save to a BytesIO buffer
+                    buf = BytesIO()
+                    img.save(buf, format='PNG')
+                    img_data = buf.getvalue()
+            except Exception as e:
+                # Fallback: use original PNG if resizing fails
+                with open(png_path, 'rb') as img_f:
+                    img_data = img_f.read()
+            img_b64 = base64.b64encode(img_data).decode('utf-8')
+            data_uri = f"data:image/png;base64,{img_b64}"
+            diagram_img_html = f'<img src="{data_uri}" alt="{diagram["title"]}" style="max-width: 600px; width: 100%; height: auto; display: block; margin: 0 auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(30,60,90,0.13);" />'
+            # Clean up PNG and MMD files after use
+            try:
+                if os.path.exists(mmd_path):
+                    os.remove(mmd_path)
+                if os.path.exists(png_path):
+                    os.remove(png_path)
+            except Exception:
+                pass
         else:
-            print(f"❌ mmdc PNG export failed for diagram {i}: {result_png.stderr}")
-            # Fallback to SVG embedding
-            svg_content = convert_mermaid_to_svg(mermaid_code)
-            diagram_html += f"""
-            <div class=\"diagram-container\">
-                <h2>{diagram['title']}</h2>
-                <p class=\"diagram-description\">{diagram['description']}</p>
-                <div class=\"diagram-svg\">
-                    {svg_content}
-                </div>
-            </div>
-            """
-    
-    icon_abs_path = None  # No longer needed
+            print(f"[Diagram Generation Error] Diagram {i} failed to generate PNG. Return code: {result_png.returncode}")
+            if result_png.stderr:
+                print(f"[mmdc stderr] {result_png.stderr.strip()}")
+            diagram_img_html = '<div class="diagram-error">Diagram could not be rendered due to invalid content.</div>'
+        container_class = "diagram-container alt" if i % 2 == 1 else "diagram-container"
+        block_html = f'''
+        <div class="{container_class}">
+            <h2>{diagram["title"]}</h2>
+            <p class="diagram-description">{diagram["description"]}</p>
+            <div class="diagram-svg">{diagram_img_html}</div>
+                    </div>
+        '''
+        diagram_blocks.append(block_html)
     full_html = f"""
     <html>
     <head>
@@ -580,45 +476,76 @@ def generate_diagrams_as_pdf(text: str, level: str, diagram_type: str = "general
                 max-width: 1200px;
                 margin: 0 auto;
                 padding: 2em;
+                background: #f6f8fa;
             }}
             h1 {{
                 font-size: 28px;
                 text-align: center;
                 margin-bottom: 1.5em;
-                color: #2a6ebd;
+                color: #1a4e8a;
+                letter-spacing: 1px;
             }}
             h2 {{
                 font-size: 22px;
-                color: #2a6ebd;
-                margin-top: 2em;
-                margin-bottom: 0.5em;
-                border-bottom: 2px solid #2a6ebd;
-                padding-bottom: 0.3em;
+                color: #197278;
+                margin-top: 1.2em;
+                margin-bottom: 0.3em;
+                border-bottom: 2px solid #197278;
+                padding-bottom: 0.2em;
+                page-break-after: avoid;
+                letter-spacing: 0.5px;
             }}
-            .diagram-container {{
-                margin-bottom: 3em;
+            .diagram-container, .diagram-container.alt {{
+                margin-bottom: 2em;
                 page-break-inside: avoid;
+                break-inside: avoid;
+                padding: 0 0 1.5em 0;
+                box-sizing: border-box;
+                background: none;
+                border: none;
+                box-shadow: none;
+                transition: none;
             }}
             .diagram-description {{
                 font-style: italic;
-                color: #666;
-                margin-bottom: 1em;
+                color: #5e548e;
+                margin-bottom: 0.7em;
                 font-size: 16px;
+                page-break-after: avoid;
+                letter-spacing: 0.2px;
             }}
             .diagram-svg {{
                 text-align: center;
-                margin: 1em 0;
-                padding: 1em;
-                background-color: #f9f9f9;
-                border-radius: 8px;
-                border: 1px solid #ddd;
+                margin: 0.5em 0 0.5em 0;
+                padding: 0.5em;
+                background-color: #fff;
+                border-radius: 10px;
+                border: 1px solid #eee;
+                page-break-inside: avoid;
+                break-inside: avoid;
+                box-shadow: 0 2px 12px rgba(30,60,90,0.10);
             }}
             .diagram-svg img {{
-                max-width: 700px;
+                max-width: 600px;
                 width: 100%;
                 height: auto;
                 display: block;
                 margin: 0 auto;
+                page-break-inside: avoid;
+                break-inside: avoid;
+                border-radius: 8px;
+                box-shadow: 0 2px 8px rgba(30,60,90,0.13);
+            }}
+            .diagram-error {{
+                color: #b71c1c;
+                font-weight: normal;
+                font-size: 14px;
+                padding: 0.5em 1em;
+                background: #fff7f7;
+                border: 1px solid #f8bbd0;
+                border-radius: 6px;
+                margin: 0.5em auto;
+                text-align: center;
             }}
             .mermaid-fallback {{
                 margin: 1em 0;
@@ -648,9 +575,13 @@ def generate_diagrams_as_pdf(text: str, level: str, diagram_type: str = "general
                 font-family: 'Courier New', monospace;
             }}
             @media print {{
-                .diagram-container {{
+                .diagram-container, .diagram-container.alt {{
                     page-break-inside: avoid;
-                    margin-bottom: 2em;
+                    break-inside: avoid;
+                    margin-bottom: 1.5em;
+                    background: none;
+                    border: none;
+                    box-shadow: none;
                 }}
                 .diagram-svg {{
                     background-color: white;
@@ -665,8 +596,7 @@ def generate_diagrams_as_pdf(text: str, level: str, diagram_type: str = "general
     </head>
     <body>
         <h1>{title}</h1>
-        {diagram_html}
-        
+        {''.join(diagram_blocks)}
         <script>
             mermaid.initialize({{
                 startOnLoad: true,
@@ -686,8 +616,28 @@ def generate_diagrams_as_pdf(text: str, level: str, diagram_type: str = "general
     </body>
     </html>
     """
-    
     pdf_buffer = BytesIO()
     HTML(string=full_html, base_url=os.path.abspath(os.path.dirname(__file__))).write_pdf(pdf_buffer)
     pdf_buffer.seek(0)
     return pdf_buffer 
+
+def generate_diagrams_from_file(file_path, level='In-depth', diagram_type='general', output_pdf_path=None):
+    """Read content from a file and generate diagrams as a PDF, saving to study-buddy-extension/ by default."""
+    if output_pdf_path is None:
+        # Save to the outer study-buddy-extension/ folder by default for debugging
+        output_pdf_path = '../diagrams_from_canvas_notes.pdf'
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    pdf_buffer = generate_diagrams_as_pdf(content, level, diagram_type)
+    with open(output_pdf_path, 'wb') as out_pdf:
+        out_pdf.write(pdf_buffer.getbuffer())
+    import os
+    abs_path = os.path.abspath(output_pdf_path)
+    print(f"✅ PDF generated at {abs_path}")
+
+if __name__ == '__main__':
+    # Example usage: generate diagrams from a real file (not test content)
+    # Replace 'my_canvas_notes.txt' with your actual file path
+    input_file = 'my_canvas_notes.txt'
+    output_pdf = 'diagrams_from_canvas_notes.pdf'
+    generate_diagrams_from_file(input_file, level='In-depth', diagram_type='general', output_pdf_path=output_pdf) 

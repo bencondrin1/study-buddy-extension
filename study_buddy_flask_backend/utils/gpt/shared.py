@@ -3,11 +3,11 @@ import re
 import subprocess
 from typing import Callable
 from dotenv import load_dotenv
+import os
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.dirname(__file__)), 'utils', '.env'))
 from openai import OpenAI
 from io import BytesIO
 
-
-load_dotenv()
 
 # Initialize OpenAI client
 api_key = os.getenv("OPENAI_API_KEY")

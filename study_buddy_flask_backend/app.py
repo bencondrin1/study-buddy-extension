@@ -1,9 +1,15 @@
+from dotenv import load_dotenv
+import os
+
+dotenv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'utils', '.env'))
+load_dotenv(dotenv_path=dotenv_path)
+
+# Now import everything else
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from io import BytesIO
 import base64
 import traceback
-import os
 import atexit
 import multiprocessing
 
@@ -35,6 +41,7 @@ def cleanup_resources():
 
 # Register cleanup function
 atexit.register(cleanup_resources)
+
 
 def fallback_extract_text(pdf_bytes):
     text = extract_text_from_pdf(BytesIO(pdf_bytes))
@@ -102,6 +109,9 @@ def generate_blob_endpoint():
         level = data.get("level", "Basic")
         output_type = data.get("output_type", "Study Guide")
         diagram_type = data.get("diagram_type", "general")
+        handwritten = data.get("handwritten", False)  # <--- NEW
+
+        print(f"[DEBUG] Handwritten flag: {handwritten}")
 
         if not pdf_base64:
             return jsonify({"error": "No PDF data provided"}), 400
@@ -109,14 +119,35 @@ def generate_blob_endpoint():
         pdf_bytes = base64.b64decode(pdf_base64)
         text = fallback_extract_text(pdf_bytes)
 
-        print(f"🧠 Generating {output_type} ({level})...")
+        print(f"[DEBUG] First 500 chars of OCR output:\n{text[:500]}")
+
+        print(f"🧠 Generating {output_type} ({level})... Handwritten: {handwritten}")
         
         if output_type == "Diagrams":
             pdf_buffer = generate_diagrams_as_pdf(text, level, diagram_type)
             filename = "diagrams.pdf"
         else:
-            pdf_buffer = generate_study_materials_as_pdf(text, level, output_type)
+            # Pass handwritten flag to study guide generator
+            pdf_buffer = generate_study_materials_as_pdf(text, level, output_type, handwritten=handwritten)
             filename = "study_materials.pdf"
+
+            # Try to print the first 500 chars of the GPT output (study guide)
+            try:
+                pdf_buffer.seek(0)
+                # Not possible to print PDF content directly, but we can print the raw_md if we modify generate_study_materials_as_pdf to return it for debugging
+                # For now, just print a placeholder
+                print(f"[DEBUG] Study guide PDF generated (cannot print PDF content directly)")
+            except Exception as e:
+                print(f"[DEBUG] Error printing GPT output: {e}")
+
+        # Save a copy to disk for debugging
+        output_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', filename))
+        with open(output_path, 'wb') as f:
+            f.write(pdf_buffer.getbuffer())
+        print(f"✅ PDF also saved at {output_path}")
+
+        # Reset buffer position for send_file
+        pdf_buffer.seek(0)
 
         return send_file(
             pdf_buffer,
